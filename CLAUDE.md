@@ -89,4 +89,5 @@ LLM は必ず以下の JSON を返す:
 - import 順序: Biome の organizeImports に従う
 - コード変更後は必ず `nr typecheck && nr lint` で確認
 - 適宜コミットし、PRを作成すること
+- 作業完了時は自動的に push して PR を作成すること（`/create-pr` スキルを使用）
 - CLAUDE.md はプロジェクトのドキュメントとして常に最新に保つこと
