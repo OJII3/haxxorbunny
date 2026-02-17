@@ -88,3 +88,5 @@ LLM は必ず以下の JSON を返す:
 - Formatter: Biome (tab インデント)
 - import 順序: Biome の organizeImports に従う
 - コード変更後は必ず `nr typecheck && nr lint` で確認
+- 適宜コミットし、PRを作成すること
+- CLAUDE.md はプロジェクトのドキュメントとして常に最新に保つこと

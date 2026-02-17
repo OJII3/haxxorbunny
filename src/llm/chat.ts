@@ -59,7 +59,8 @@ export async function chat(
 	}
 
 	try {
-		const parsed = JSON.parse(raw) as LLMResponse;
+		const cleaned = raw.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "");
+		const parsed = JSON.parse(cleaned) as LLMResponse;
 
 		if (parsed.personality_update) {
 			updatePersonality(parsed.personality_update);
