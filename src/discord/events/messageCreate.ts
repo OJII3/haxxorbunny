@@ -32,7 +32,24 @@ export async function handleMessageCreate(message: Message): Promise<void> {
 		isBot: message.author.bot,
 	});
 
-	if (!shouldRespond(message)) return;
+	if (!shouldRespond(message)) {
+		// 5% の確率でランダムリアクション
+		if (!message.author.bot && Math.random() < 0.05) {
+			const emojis = ["👀", "🐰", "✨", "🤔", "💻", "🔥", "👍"];
+			const emoji = emojis[Math.floor(Math.random() * emojis.length)];
+			if (emoji) {
+				await message.react(emoji).catch(() => {});
+				saveBotAction({
+					action: "reaction",
+					channelId: message.channelId,
+					content: emoji,
+					reasoning: "Random reaction",
+					triggeredBy: "random",
+				});
+			}
+		}
+		return;
+	}
 
 	try {
 		const recentMessages = await fetchRecentMessages(message);
