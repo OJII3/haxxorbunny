@@ -1,5 +1,6 @@
 import type { Message } from "discord.js";
 import { client } from "../../client.ts";
+import { saveBotAction, saveMessage } from "../../db/queries.ts";
 import { chat } from "../../llm/chat.ts";
 
 function shouldRespond(message: Message): boolean {
@@ -8,10 +9,8 @@ function shouldRespond(message: Message): boolean {
 	const botUser = client.user;
 	if (!botUser) return false;
 
-	// メンションされた場合
 	if (message.mentions.has(botUser)) return true;
 
-	// bot の名前が含まれている場合
 	const lowerContent = message.content.toLowerCase();
 	if (lowerContent.includes("haxxerbunny")) return true;
 
@@ -24,6 +23,15 @@ async function fetchRecentMessages(message: Message): Promise<Message[]> {
 }
 
 export async function handleMessageCreate(message: Message): Promise<void> {
+	// すべてのメッセージを DB に保存
+	saveMessage({
+		channelId: message.channelId,
+		userId: message.author.id,
+		username: message.author.displayName,
+		content: message.content,
+		isBot: message.author.bot,
+	});
+
 	if (!shouldRespond(message)) return;
 
 	try {
@@ -38,6 +46,13 @@ export async function handleMessageCreate(message: Message): Promise<void> {
 			case "message":
 				if (response.content && message.channel.isSendable()) {
 					await message.channel.send(response.content);
+					saveMessage({
+						channelId: message.channelId,
+						userId: client.user?.id ?? "bot",
+						username: "haxxerbunny",
+						content: response.content,
+						isBot: true,
+					});
 				}
 				break;
 			case "reaction":
@@ -48,6 +63,14 @@ export async function handleMessageCreate(message: Message): Promise<void> {
 			case "none":
 				break;
 		}
+
+		saveBotAction({
+			action: response.action,
+			channelId: message.channelId,
+			content: response.content ?? null,
+			reasoning: response.reasoning ?? null,
+			triggeredBy: "mention",
+		});
 	} catch (error) {
 		console.error("[messageCreate] Error:", error);
 	}
