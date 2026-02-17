@@ -1,4 +1,4 @@
-# haxxerbunny
+# haxxorbunny
 
 Discord に住む自律的エージェント bot。LLM (aiclient-2-api 経由 Gemini) を使って自律的に行動する。
 
@@ -49,7 +49,7 @@ src/
     └── queries.ts        # クエリヘルパー
 data/
 ├── personality.json      # 可変プロンプト (bot が自己更新可能)
-└── haxxerbunny.db        # SQLite DB (gitignore)
+└── haxxorbunny.db        # SQLite DB (gitignore)
 ```
 
 ## アーキテクチャ

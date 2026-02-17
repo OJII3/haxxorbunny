@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Containerfile
-    container_name: haxxerbunny
+    container_name: haxxorbunny
     env_file: .env
     volumes:
       - bot-data:/app/data
@@ -13,7 +13,7 @@ services:
 
   aiclient:
     image: justlikemaki/aiclient-2-api
-    container_name: haxxerbunny-aiclient
+    container_name: haxxorbunny-aiclient
     ports:
       - "3000:3000"
     volumes:

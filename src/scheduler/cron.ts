@@ -56,7 +56,7 @@ async function autonomousPost(): Promise<void> {
 			saveMessage({
 				channelId: channel.id,
 				userId: client.user?.id ?? "bot",
-				username: "haxxerbunny",
+				username: "haxxorbunny",
 				content: parsed.content,
 				isBot: true,
 			});

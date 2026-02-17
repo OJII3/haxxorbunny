@@ -7,7 +7,7 @@ import { startScheduler } from "./scheduler/index.ts";
 runMigrations();
 registerEvents(client);
 
-console.log("[boot] Starting haxxerbunny...");
+console.log("[boot] Starting haxxorbunny...");
 await client.login(config.discord.token);
 
 startScheduler();

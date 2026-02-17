@@ -12,7 +12,7 @@ function shouldRespond(message: Message): boolean {
 	if (message.mentions.has(botUser)) return true;
 
 	const lowerContent = message.content.toLowerCase();
-	if (lowerContent.includes("haxxerbunny")) return true;
+	if (lowerContent.includes("haxxorbunny")) return true;
 
 	return false;
 }
@@ -66,7 +66,7 @@ export async function handleMessageCreate(message: Message): Promise<void> {
 					saveMessage({
 						channelId: message.channelId,
 						userId: client.user?.id ?? "bot",
-						username: "haxxerbunny",
+						username: "haxxorbunny",
 						content: response.content,
 						isBot: true,
 					});
