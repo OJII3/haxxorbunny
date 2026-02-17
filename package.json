@@ -1,0 +1,25 @@
+{
+	"name": "haxxerbunny",
+	"version": "0.1.0",
+	"module": "src/index.ts",
+	"type": "module",
+	"private": true,
+	"scripts": {
+		"dev": "bun run --watch src/index.ts",
+		"start": "bun run src/index.ts",
+		"typecheck": "tsc --noEmit",
+		"lint": "biome check .",
+		"lint:fix": "biome check --write .",
+		"db:generate": "drizzle-kit generate",
+		"db:migrate": "drizzle-kit migrate"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.4.2",
+		"@types/bun": "latest",
+		"typescript": "^5"
+	},
+	"dependencies": {
+		"discord.js": "^14.25.1",
+		"openai": "^6.22.0"
+	}
+}
