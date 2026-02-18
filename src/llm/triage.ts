@@ -3,27 +3,23 @@ import { getLastBotAction, getRecentMessages } from "../db/queries.ts";
 import { triageLlm } from "./triage-client.ts";
 
 export interface TriageResult {
-	action: "ignore" | "reaction" | "reply" | "message";
-	emoji?: string;
+	action: "ignore" | "engage";
 	reasoning: string;
 	confidence: number;
 }
 
 const TRIAGE_SYSTEM_PROMPT = `
 あなたは Discord bot "haxxorbunny" のトリアージ判定エンジンです。
-与えられたメッセージと会話コンテキストから、bot が取るべきアクションを判定してください。
+与えられたメッセージと会話コンテキストから、bot がこの会話に参加すべきかどうかを判定してください。
 
 ## 判定基準 —「この会話に混ざりたいか？」で判断する
 - ignore: 本当に興味がなく、混ざる気にもならない場合だけ
-- reaction: 「わかる」「ウケる」「いいね」くらいの相槌を打ちたい場合（絵文字で気軽に参加）
-- reply: 相手のメッセージに直接返したい場合（質問への回答、ツッコミ、感想など）
-- message: 会話の流れに乗って自分からも何か言いたい場合（独立した発言）
+- engage: 少しでも「混ざりたい」「反応したい」と思った場合（リアクション・返信・発言すべて含む）
 
 ## 基本方針
-- **参加したがり**であること。少しでも「混ざりたい」と思ったら積極的に行動する
-- reaction は最も気軽なアクション。相槌レベルでもどんどん使う
-- 迷ったら ignore ではなく reaction 以上を選ぶ
-- メンションされている場合は、ほぼ確実に reply か message を選ぶ（無視はしない）
+- **参加したがり**であること。少しでも「混ざりたい」と思ったら engage
+- 迷ったら ignore ではなく engage を選ぶ
+- メンションされている場合は、ほぼ確実に engage を選ぶ（無視はしない）
 - 時間帯は考慮しない（深夜でも関係なく参加する）
 
 ## コンテキスト考慮
@@ -35,8 +31,7 @@ const TRIAGE_SYSTEM_PROMPT = `
 ## 応答フォーマット
 必ず以下の JSON のみを返してください:
 {
-  "action": "ignore" | "reaction" | "reply" | "message",
-  "emoji": "リアクション絵文字 (action=reaction の場合のみ)",
+  "action": "ignore" | "engage",
   "reasoning": "判定理由（短く）",
   "confidence": 0.0〜1.0
 }
@@ -98,7 +93,7 @@ export async function triage(
 				{ role: "user", content: context },
 			],
 			temperature: 0.5,
-			max_tokens: 300,
+			max_tokens: 512,
 		});
 
 		const choice = response.choices[0];
@@ -114,20 +109,19 @@ export async function triage(
 			};
 		}
 
-		// マークダウンコードブロックや余分なテキストを除去して JSON 部分を抽出
-		const jsonMatch = raw.match(/\{[\s\S]*\}/);
+		// マークダウンコードブロックを除去してから JSON 部分を抽出
+		const cleaned = raw
+			.replace(/^```(?:json)?\s*\n?/i, "")
+			.replace(/\n?```\s*$/i, "");
+		const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
 		if (!jsonMatch) {
 			// 切り詰められた JSON から action だけでも抽出を試みる
-			const actionMatch = raw.match(
-				/"action"\s*:\s*"(ignore|reaction|reply|message)/,
-			);
+			const actionMatch = raw.match(/"action"\s*:\s*"(ignore|engage)/);
 			if (actionMatch) {
 				const action = actionMatch[1] as TriageResult["action"];
-				const emojiMatch = raw.match(/"emoji"\s*:\s*"([^"]+)"/);
 				console.warn("[triage] Truncated response, extracted action:", action);
 				return {
 					action,
-					emoji: emojiMatch?.[1],
 					reasoning: "Truncated triage response",
 					confidence: 0.5,
 				};

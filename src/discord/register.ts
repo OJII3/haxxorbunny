@@ -4,7 +4,7 @@ import { handleMessageReactionAdd } from "./events/messageReactionAdd.ts";
 import { handleReady } from "./events/ready.ts";
 
 export function registerEvents(client: Client): void {
-	client.once("ready", handleReady);
+	client.once("clientReady", handleReady);
 	client.on("messageCreate", handleMessageCreate);
 	client.on("messageReactionAdd", handleMessageReactionAdd);
 }

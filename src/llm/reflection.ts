@@ -59,7 +59,7 @@ ${conversationContext || "(なし)"}
 				{ role: "user", content: context },
 			],
 			temperature: 0.3,
-			max_tokens: 200,
+			max_tokens: 512,
 		});
 
 		const raw = response.choices[0]?.message?.content?.trim();
@@ -68,7 +68,11 @@ ${conversationContext || "(なし)"}
 			return;
 		}
 
-		const jsonMatch = raw.match(/\{[\s\S]*\}/);
+		// マークダウンコードブロックを除去してから JSON 部分を抽出
+		const cleaned = raw
+			.replace(/^```(?:json)?\s*\n?/i, "")
+			.replace(/\n?```\s*$/i, "");
+		const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
 		if (!jsonMatch) {
 			console.warn("[reflection] No JSON found in response:", raw);
 			return;

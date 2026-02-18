@@ -1,11 +1,8 @@
 import type { Message } from "discord.js";
+import { runAgentLoop } from "../../agent/loop.ts";
+import type { AgentContext } from "../../agent/types.ts";
 import { client } from "../../client.ts";
-import {
-	getRecentMessages,
-	saveBotAction,
-	saveMessage,
-} from "../../db/queries.ts";
-import { chat } from "../../llm/chat.ts";
+import { getRecentMessages, saveMessage } from "../../db/queries.ts";
 import { reflect } from "../../llm/reflection.ts";
 import { triage } from "../../llm/triage.ts";
 import { shouldThrottle } from "../../llm/triage-throttle.ts";
@@ -22,68 +19,9 @@ function isMentioned(message: Message): boolean {
 	return false;
 }
 
-async function fetchRecentMessages(message: Message): Promise<Message[]> {
-	const fetched = await message.channel.messages.fetch({ limit: 20 });
-	return [...fetched.values()].reverse();
-}
-
 function buildConversationContext(channelId: string): string {
 	const messages = getRecentMessages(channelId, 10);
 	return messages.map((m) => `[${m.username}]: ${m.content}`).join("\n");
-}
-
-async function handleMainLLM(
-	message: Message,
-	triggeredBy: string,
-): Promise<void> {
-	const recentMessages = await fetchRecentMessages(message);
-	const response = await chat(message, recentMessages);
-
-	console.log(
-		`[action] ${response.action} | trigger: ${triggeredBy} | reason: ${response.reasoning ?? "N/A"}`,
-	);
-
-	switch (response.action) {
-		case "reply":
-			if (response.content) {
-				await message.reply(response.content);
-				saveMessage({
-					channelId: message.channelId,
-					userId: client.user?.id ?? "bot",
-					username: "haxxorbunny",
-					content: response.content,
-					isBot: true,
-				});
-			}
-			break;
-		case "message":
-			if (response.content && message.channel.isSendable()) {
-				await message.channel.send(response.content);
-				saveMessage({
-					channelId: message.channelId,
-					userId: client.user?.id ?? "bot",
-					username: "haxxorbunny",
-					content: response.content,
-					isBot: true,
-				});
-			}
-			break;
-		case "reaction":
-			if (response.emoji) {
-				await message.react(response.emoji);
-			}
-			break;
-		case "none":
-			break;
-	}
-
-	saveBotAction({
-		action: response.action,
-		channelId: message.channelId,
-		content: response.content ?? null,
-		reasoning: response.reasoning ?? null,
-		triggeredBy,
-	});
 }
 
 export async function handleMessageCreate(message: Message): Promise<void> {
@@ -133,37 +71,20 @@ export async function handleMessageCreate(message: Message): Promise<void> {
 				break;
 			}
 
-			case "reaction":
-				if (triageResult.emoji) {
-					await message.react(triageResult.emoji).catch(() => {});
-					saveBotAction({
-						action: "reaction",
-						channelId: message.channelId,
-						content: triageResult.emoji,
-						reasoning: triageResult.reasoning,
-						triggeredBy: "triage",
-					});
-				}
-				// reaction 後にも reflection (fire-and-forget)
-				{
-					const ctx = buildConversationContext(message.channelId);
-					reflect(
-						message.channelId,
-						message.content,
-						message.author.displayName,
-						"reaction",
-						ctx,
-					).catch((e) =>
-						console.error("[reflection] fire-and-forget error:", e),
-					);
-				}
-				break;
+			case "engage": {
+				// エージェントループ起動
+				const guild = message.guild;
+				if (!guild) break;
 
-			case "reply":
-			case "message":
-				// メインLLM が memory_entry/user_note を処理するので reflection 不要
-				await handleMainLLM(message, "triage");
+				const agentCtx: AgentContext = {
+					triggerMessage: message,
+					channel: message.channel,
+					guild,
+					triggeredBy: "triage",
+				};
+				await runAgentLoop(agentCtx);
 				break;
+			}
 		}
 	} catch (error) {
 		console.error("[messageCreate] Triage handler error:", error);
