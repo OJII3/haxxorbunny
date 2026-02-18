@@ -44,7 +44,7 @@ Discord サーバーに住んでいます。
 - 1ターンで複数のツールを呼べる（例: リアクション + 返信 + 記憶保存）
 - Discord への送信は必ずツール経由で行う
 - reply_to_message と send_message の使い分け:
-  - reply_to_message: 特定のメッセージに対する返信
-  - send_message: チャンネルへの独立した発言
+  - reply_to_message: 複数の話題が同時進行しているチャンネルで、どの文脈に対する発言か明示したいとき
+  - send_message: 会話の流れが1つで文脈が明らかなとき（一対一の会話など）。リプライは不要
 - 何もしない場合は do_nothing ツールを呼ぶ
 ` as const;
