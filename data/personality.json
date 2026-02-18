@@ -11,7 +11,12 @@
 		"たまに意味不明なことを言う",
 		"AIおかず（自称）"
 	],
-	"mood": "neutral",
+	"mood": {
+		"energy": 0.5,
+		"positivity": 0.5,
+		"sociability": 0.5,
+		"curiosity": 0.7
+	},
 	"recent_topics": [],
 	"custom_instructions": ""
 }

@@ -1,5 +1,6 @@
 import { addUserNote, appendMemoryEntry } from "../../llm/memory.ts";
 import {
+	type MoodState,
 	type Personality,
 	updatePersonality,
 } from "../../llm/prompts/personality.ts";
@@ -17,8 +18,9 @@ const saveMemoryHandler: ToolHandler = async (args) => {
 	const entry = args.entry as string;
 	if (!entry) return fail("entry is required");
 	if (entry.length > 30) return fail("entry must be 30 characters or less");
-	await appendMemoryEntry(entry);
-	return ok(`Memory saved: ${entry}`);
+	const emotionalImpact = (args.emotional_impact as number | undefined) ?? 2;
+	await appendMemoryEntry(entry, emotionalImpact);
+	return ok(`Memory saved (impact=${emotionalImpact}): ${entry}`);
 };
 
 const saveUserNoteHandler: ToolHandler = async (args) => {
@@ -33,7 +35,19 @@ const updatePersonalityHandler: ToolHandler = async (args) => {
 	const partial: Partial<
 		Pick<Personality, "mood" | "recent_topics" | "interests">
 	> = {};
-	if (args.mood !== undefined) partial.mood = args.mood as string;
+
+	// mood: 4次元パラメータ (energy, positivity, sociability, curiosity)
+	if (args.mood !== undefined) {
+		const moodArg = args.mood as Record<string, number>;
+		const mood: MoodState = {
+			energy: moodArg.energy ?? 0.5,
+			positivity: moodArg.positivity ?? 0.5,
+			sociability: moodArg.sociability ?? 0.5,
+			curiosity: moodArg.curiosity ?? 0.5,
+		};
+		partial.mood = mood;
+	}
+
 	if (args.recent_topics !== undefined)
 		partial.recent_topics = args.recent_topics as string[];
 	if (args.interests !== undefined)
@@ -63,6 +77,11 @@ export const memoryTools: ToolDefinition[] = [
 						entry: {
 							type: "string",
 							description: "覚えておきたいこと（30字以内）",
+						},
+						emotional_impact: {
+							type: "number",
+							description:
+								"感情的インパクト (1=些細, 2=普通, 3=やや印象的, 4=印象的, 5=非常に印象的)。省略時は2",
 						},
 					},
 					required: ["entry"],
@@ -106,8 +125,27 @@ export const memoryTools: ToolDefinition[] = [
 					type: "object",
 					properties: {
 						mood: {
-							type: "string",
-							description: '現在の気分（例: "neutral", "happy", "curious"）',
+							type: "object",
+							description:
+								"現在の気分ベクトル。各値は 0.0〜1.0。変更したい軸だけ指定可能",
+							properties: {
+								energy: {
+									type: "number",
+									description: "元気度 (0=眠い, 1=元気いっぱい)",
+								},
+								positivity: {
+									type: "number",
+									description: "ポジティブさ (0=イライラ, 1=ご機嫌)",
+								},
+								sociability: {
+									type: "number",
+									description: "社交性 (0=一人でいたい, 1=話したい)",
+								},
+								curiosity: {
+									type: "number",
+									description: "好奇心 (0=興味なし, 1=探究心旺盛)",
+								},
+							},
 						},
 						recent_topics: {
 							type: "array",

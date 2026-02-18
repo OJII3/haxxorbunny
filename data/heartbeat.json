@@ -1,4 +1,8 @@
 {
+	"active_hours": {
+		"start": 8,
+		"end": 26
+	},
 	"tasks": [
 		{
 			"id": "autonomous_post",
@@ -16,6 +20,12 @@
 			"id": "cleanup_old_memory",
 			"description": "古い日次記憶ファイルを整理する",
 			"interval_minutes": 1440,
+			"enabled": true
+		},
+		{
+			"id": "dream_processing",
+			"description": "記憶を夢のように連想・分析し、洞察を生成・不要記憶を整理する",
+			"interval_minutes": 720,
 			"enabled": true
 		}
 	],

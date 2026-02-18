@@ -9,9 +9,37 @@ export interface HeartbeatTask {
 	enabled: boolean;
 }
 
+export interface ActiveHours {
+	start: number; // 開始時 (0-23)
+	end: number; // 終了時 (24を超えると翌日扱い。例: 26 = 翌2時)
+}
+
 export interface Heartbeat {
 	tasks: HeartbeatTask[];
+	active_hours?: ActiveHours;
 	last_run: string;
+}
+
+/**
+ * 現在時刻がアクティブ時間帯内かどうかを判定する
+ * JST (Asia/Tokyo) 基準
+ */
+export function isWithinActiveHours(heartbeat: Heartbeat): boolean {
+	if (!heartbeat.active_hours) return true;
+
+	const { start, end } = heartbeat.active_hours;
+	const now = new Date();
+	const jstHour = now.getUTCHours() + 9 + now.getUTCMinutes() / 60;
+	const normalizedHour = jstHour >= 24 ? jstHour - 24 : jstHour;
+
+	if (end <= 24) {
+		// 同日内: start <= now < end
+		return normalizedHour >= start && normalizedHour < end;
+	}
+
+	// 日跨ぎ: start <= now || now < (end - 24)
+	const endNormalized = end - 24;
+	return normalizedHour >= start || normalizedHour < endNormalized;
 }
 
 const HEARTBEAT_PATH = join(import.meta.dir, "../../data/heartbeat.json");

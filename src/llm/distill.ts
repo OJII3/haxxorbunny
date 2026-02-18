@@ -2,6 +2,8 @@ import { config } from "../config.ts";
 import {
 	loadDailyMemory,
 	loadMemory,
+	type MemoryEntry,
+	normalizeEntry,
 	saveDailyMemory,
 	saveMemory,
 } from "./memory.ts";
@@ -50,7 +52,12 @@ export async function distillDailyMemory(dateKey?: string): Promise<void> {
 
 	const longTermList =
 		memory.entries.length > 0
-			? memory.entries.map((e, i) => `[${i}] ${e}`).join("\n")
+			? memory.entries
+					.map((e, i) => {
+						const entry = normalizeEntry(e);
+						return `[${i}] ${entry.text} (impact=${entry.emotional_impact})`;
+					})
+					.join("\n")
 			: "(なし)";
 
 	const context = `
@@ -69,7 +76,7 @@ ${longTermList}
 				{ role: "user", content: context },
 			],
 			temperature: 0.3,
-			max_tokens: 400,
+			max_tokens: 2048,
 		});
 
 		const raw = response.choices[0]?.message?.content?.trim();
@@ -103,10 +110,16 @@ ${longTermList}
 			);
 		}
 
-		// 長期記憶に昇格
+		// 長期記憶に昇格 (MemoryEntry 形式で保存)
 		for (const entry of result.promote_to_long_term) {
-			if (!memory.entries.includes(entry)) {
-				memory.entries.push(entry);
+			const existingTexts = memory.entries.map((e) => normalizeEntry(e).text);
+			if (!existingTexts.includes(entry)) {
+				const memoryEntry: MemoryEntry = {
+					text: entry,
+					emotional_impact: 3, // 蒸留で昇格 = やや印象的
+					created_at: new Date().toISOString(),
+				};
+				memory.entries.push(memoryEntry);
 			}
 		}
 		if (result.promote_to_long_term.length > 0) {
