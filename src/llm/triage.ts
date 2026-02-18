@@ -119,7 +119,7 @@ export async function triage(
 		if (!jsonMatch) {
 			// 切り詰められた JSON から action だけでも抽出を試みる
 			const actionMatch = raw.match(
-				/"action"\s*:\s*"(ignore|reaction|reply|message)"/,
+				/"action"\s*:\s*"(ignore|reaction|reply|message)/,
 			);
 			if (actionMatch) {
 				const action = actionMatch[1] as TriageResult["action"];
