@@ -34,8 +34,11 @@ src/
 │   ├── events/           # messageCreate, ready, messageReactionAdd
 │   └── register.ts       # イベント登録
 ├── llm/
-│   ├── client.ts         # OpenAI SDK ラッパー
-│   ├── chat.ts           # LLM チャット呼び出し
+│   ├── client.ts         # メイン LLM OpenAI SDK ラッパー
+│   ├── triage-client.ts  # トリアージ LLM 専用クライアント
+│   ├── chat.ts           # メイン LLM チャット呼び出し
+│   ├── triage.ts         # トリアージ判定ロジック + プロンプト
+│   ├── triage-throttle.ts # チャンネルごとのスロットリング
 │   └── prompts/
 │       ├── system.ts     # 不変システムプロンプト
 │       └── personality.ts # 可変プロンプト (personality.json)
@@ -56,23 +59,46 @@ data/
 
 ### LLM レスポンス形式
 
-LLM は必ず以下の JSON を返す:
+メイン LLM は必ず以下の JSON を返す:
 
 ```json
 {
-  "action": "message" | "reaction" | "none",
-  "content": "メッセージ内容",
-  "emoji": "リアクション絵文字",
+  "action": "message" | "reply" | "reaction" | "none",
+  "content": "メッセージ内容 (message/reply)",
+  "emoji": "リアクション絵文字 (reaction)",
   "personality_update": null | { ...部分更新 },
   "reasoning": "行動の理由（内部ログ用）"
 }
 ```
 
-### イベントフロー
+### トリアージ LLM レスポンス形式
 
-1. **メッセージ受信** → DB 保存 → 応答判定 (メンション/名前含む) → LLM → Discord 送信
-2. **自主発言** → 30分ごとに cron → LLM に問い合わせ → 投稿 or スキップ
-3. **ランダムリアクション** → 応答対象外メッセージに 5% の確率でリアクション
+トリアージ LLM（高速モデル）は以下の JSON を返す:
+
+```json
+{
+  "action": "ignore" | "reaction" | "reply" | "message",
+  "emoji": "リアクション絵文字 (reaction の場合)",
+  "reasoning": "判定理由",
+  "confidence": 0.0〜1.0
+}
+```
+
+### イベントフロー（2段階パイプライン）
+
+```
+メッセージ受信 → DB保存 → Bot除外
+  ├─ メンション → バイパス → メインLLM → reply
+  └─ その他 → スロットル判定 → トリアージLLM(高速) → 判定
+       ├─ ignore: 何もしない
+       ├─ reaction: トリアージが絵文字選択（メインLLM不要）
+       ├─ reply: メインLLM → message.reply()
+       └─ message: メインLLM → channel.send()
+```
+
+1. **メンション受信** → DB 保存 → トリアージバイパス → メイン LLM → Discord 送信
+2. **通常メッセージ** → DB 保存 → スロットル判定 → トリアージ LLM → アクション実行
+3. **自主発言** → 30分ごとに cron → メイン LLM に問い合わせ → 投稿 or スキップ
 
 ### DB テーブル
 
