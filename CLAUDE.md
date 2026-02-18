@@ -134,8 +134,8 @@ data/
        ├─ tool_calls → 各ツール実行 → 結果を LLM に返す → ループ
        └─ finish_reason=stop → 終了（最大5イテレーション）
 
-cron (30分) → heartbeat タスクチェック
-  ├─ autonomous_post (30分): エージェントループ → 自主発言 + personality + memory 更新
+cron (10分) → heartbeat タスクチェック
+  ├─ autonomous_post (10分): エージェントループ → 自主発言 + personality + memory 更新
   ├─ distill_memory (6時間): 蒸留LLM(flash) → 日次記憶集約 + 長期記憶更新
   └─ cleanup_old_memory (24時間): 古い日次ファイルの整理
 ```

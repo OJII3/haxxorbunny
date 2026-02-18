@@ -3,7 +3,7 @@
 		{
 			"id": "autonomous_post",
 			"description": "自主的に独り言を投稿する",
-			"interval_minutes": 30,
+			"interval_minutes": 10,
 			"enabled": true
 		},
 		{
