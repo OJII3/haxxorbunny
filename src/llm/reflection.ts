@@ -1,12 +1,15 @@
 import { config } from "../config.ts";
 import { appendMemoryEntry } from "./memory.ts";
-import { type Personality, updatePersonality } from "./prompts/personality.ts";
+import type { MoodState, Personality } from "./prompts/personality.ts";
+import { updatePersonality } from "./prompts/personality.ts";
 import { triageLlm } from "./triage-client.ts";
 
 interface ReflectionResult {
-	personality_update?: Partial<
-		Pick<Personality, "mood" | "recent_topics" | "interests">
-	> | null;
+	personality_update?: {
+		mood?: Partial<MoodState>;
+		recent_topics?: string[];
+		interests?: string[];
+	} | null;
 	memory_entry?: string | null;
 	reasoning: string;
 }
@@ -21,13 +24,18 @@ const REFLECTION_SYSTEM_PROMPT = `
 ## 応答フォーマット
 必ず以下の JSON のみを返してください:
 {
-  "personality_update": null | { "mood": "...", "recent_topics": [...], "interests": [...] },
+  "personality_update": null | {
+    "mood": { "energy": 0.0-1.0, "positivity": 0.0-1.0, "sociability": 0.0-1.0, "curiosity": 0.0-1.0 },
+    "recent_topics": [...],
+    "interests": [...]
+  },
   "memory_entry": null | "覚えておきたいこと（30字以内）",
   "reasoning": "判定理由（短く）"
 }
 
 注意:
-- personality_update で変更できるのは mood, recent_topics, interests のみ
+- mood は4次元ベクトル（energy=元気度, positivity=ポジティブさ, sociability=社交性, curiosity=好奇心）。各 0.0〜1.0
+- mood は変更したい軸だけ含めればOK
 - personality_update は変更したいフィールドのみ含めてください
 - 大きな変更は不要。微調整のみ
 - 記憶は本当に重要なことだけ（ユーザーの好み、重要な出来事など）
@@ -81,11 +89,24 @@ ${conversationContext || "(なし)"}
 		const result = JSON.parse(jsonMatch[0]) as ReflectionResult;
 
 		if (result.personality_update) {
-			updatePersonality(result.personality_update);
-			console.log(
-				"[reflection/personality] Updated:",
-				result.personality_update,
-			);
+			const update: Partial<Personality> = {};
+			if (result.personality_update.mood) {
+				// partial mood → 現在の値にマージして MoodState にする
+				update.mood = {
+					energy: result.personality_update.mood.energy ?? 0.5,
+					positivity: result.personality_update.mood.positivity ?? 0.5,
+					sociability: result.personality_update.mood.sociability ?? 0.5,
+					curiosity: result.personality_update.mood.curiosity ?? 0.5,
+				};
+			}
+			if (result.personality_update.recent_topics) {
+				update.recent_topics = result.personality_update.recent_topics;
+			}
+			if (result.personality_update.interests) {
+				update.interests = result.personality_update.interests;
+			}
+			updatePersonality(update);
+			console.log("[reflection/personality] Updated:", update);
 		}
 
 		if (result.memory_entry) {
