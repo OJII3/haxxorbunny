@@ -98,10 +98,10 @@ export async function triage(
 				{ role: "user", content: context },
 			],
 			temperature: 0.5,
-			max_tokens: 200,
+			max_tokens: 300,
 		});
 
-		const raw = response.choices[0]?.message?.content;
+		const raw = response.choices[0]?.message?.content?.trim();
 		if (!raw) {
 			return {
 				action: "ignore",
@@ -110,7 +110,18 @@ export async function triage(
 			};
 		}
 
-		const parsed = JSON.parse(raw) as TriageResult;
+		// マークダウンコードブロックや余分なテキストを除去して JSON 部分を抽出
+		const jsonMatch = raw.match(/\{[\s\S]*\}/);
+		if (!jsonMatch) {
+			console.warn("[triage] No JSON found in response:", raw);
+			return {
+				action: "ignore",
+				reasoning: "No JSON in triage response",
+				confidence: 0,
+			};
+		}
+
+		const parsed = JSON.parse(jsonMatch[0]) as TriageResult;
 		return parsed;
 	} catch (error) {
 		console.error("[triage] Error:", error);
