@@ -98,7 +98,7 @@ export async function triage(
 				{ role: "user", content: context },
 			],
 			temperature: 0.5,
-			max_tokens: 300,
+			max_tokens: 512,
 		});
 
 		const choice = response.choices[0];
@@ -114,8 +114,11 @@ export async function triage(
 			};
 		}
 
-		// マークダウンコードブロックや余分なテキストを除去して JSON 部分を抽出
-		const jsonMatch = raw.match(/\{[\s\S]*\}/);
+		// マークダウンコードブロックを除去してから JSON 部分を抽出
+		const cleaned = raw
+			.replace(/^```(?:json)?\s*\n?/i, "")
+			.replace(/\n?```\s*$/i, "");
+		const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
 		if (!jsonMatch) {
 			// 切り詰められた JSON から action だけでも抽出を試みる
 			const actionMatch = raw.match(

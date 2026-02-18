@@ -78,7 +78,11 @@ ${longTermList}
 			return;
 		}
 
-		const jsonMatch = raw.match(/\{[\s\S]*\}/);
+		// マークダウンコードブロックを除去してから JSON 部分を抽出
+		const cleaned = raw
+			.replace(/^```(?:json)?\s*\n?/i, "")
+			.replace(/\n?```\s*$/i, "");
+		const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
 		if (!jsonMatch) {
 			console.warn("[distill] No JSON found in response:", raw);
 			return;
