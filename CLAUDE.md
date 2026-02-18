@@ -117,3 +117,4 @@ data/
 - 適宜コミットし、PRを作成すること
 - 作業完了時は自動的に push して PR を作成すること（`/create-pr` スキルを使用）
 - CLAUDE.md はプロジェクトのドキュメントとして常に最新に保つこと
+- ユーザーが「merge」と言った場合、該当 PR をマージし、最新の main ブランチに戻ること（`gh pr merge` → `git checkout main && git pull`）
