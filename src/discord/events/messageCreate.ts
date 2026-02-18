@@ -3,6 +3,7 @@ import { markActivity, runAgentLoop } from "../../agent/loop.ts";
 import type { AgentContext } from "../../agent/types.ts";
 import { client } from "../../client.ts";
 import { getRecentMessages, saveMessage } from "../../db/queries.ts";
+import { bufferMessage, setFlushHandler } from "../../llm/message-buffer.ts";
 import { reflect } from "../../llm/reflection.ts";
 import { triage } from "../../llm/triage.ts";
 import { shouldThrottle } from "../../llm/triage-throttle.ts";
@@ -26,6 +27,77 @@ function buildConversationContext(channelId: string): string {
 	return messages.map((m) => `[${m.username}]: ${m.content}`).join("\n");
 }
 
+async function processBufferedMessages(
+	messages: Message[],
+	hasMention: boolean,
+): Promise<void> {
+	if (messages.length === 0) return;
+
+	const lastMessage = messages.at(-1);
+	if (!lastMessage) return;
+
+	const channelId = lastMessage.channelId;
+	const authorName = lastMessage.author.displayName;
+
+	// 結合コンテンツ（複数メッセージを改行で結合）
+	const combinedContent = messages.map((m) => m.content).join("\n");
+
+	console.log(
+		`[buffer] flushing ${messages.length} message(s) from ${authorName} in ${channelId}`,
+	);
+
+	// スロットル判定（メンション時はバイパス）
+	if (!hasMention && shouldThrottle(channelId)) {
+		return;
+	}
+
+	try {
+		const triageResult = await triage(
+			channelId,
+			combinedContent,
+			authorName,
+			hasMention,
+		);
+
+		console.log(
+			`[triage] ${triageResult.action} (${triageResult.confidence}) | reason: ${triageResult.reasoning}`,
+		);
+
+		switch (triageResult.action) {
+			case "ignore": {
+				const ctx = buildConversationContext(channelId);
+				reflect(channelId, combinedContent, authorName, "ignore", ctx).catch(
+					(e) => console.error("[reflection] fire-and-forget error:", e),
+				);
+				break;
+			}
+
+			case "engage": {
+				const guild = lastMessage.guild;
+				if (!guild) break;
+
+				const agentCtx: AgentContext = {
+					triggerMessage: lastMessage,
+					channel: lastMessage.channel,
+					guild,
+					triggeredBy: "triage",
+				};
+				await runAgentLoop(agentCtx);
+				break;
+			}
+		}
+	} catch (error) {
+		console.error("[messageCreate] Triage handler error:", error);
+	}
+}
+
+// フラッシュハンドラを登録
+setFlushHandler((messages, hasMention) => {
+	processBufferedMessages(messages, hasMention).catch((e) =>
+		console.error("[messageCreate] processBufferedMessages error:", e),
+	);
+});
+
 export async function handleMessageCreate(message: Message): Promise<void> {
 	// すべてのメッセージを DB に保存
 	saveMessage({
@@ -42,56 +114,7 @@ export async function handleMessageCreate(message: Message): Promise<void> {
 	// アクティビティ記録（人間のメッセージのみ）
 	markActivity();
 
+	// デバウンスバッファにメッセージを追加
 	const mentioned = isMentioned(message);
-
-	// スロットル判定（メンション時はバイパス）
-	if (!mentioned && shouldThrottle(message.channelId)) {
-		return;
-	}
-
-	// 全メッセージ → トリアージ → アクション実行
-	try {
-		const triageResult = await triage(
-			message.channelId,
-			message.content,
-			message.author.displayName,
-			mentioned,
-		);
-
-		console.log(
-			`[triage] ${triageResult.action} (${triageResult.confidence}) | reason: ${triageResult.reasoning}`,
-		);
-
-		switch (triageResult.action) {
-			case "ignore": {
-				// ignore でも reflection で人格・記憶を更新 (fire-and-forget)
-				const ctx = buildConversationContext(message.channelId);
-				reflect(
-					message.channelId,
-					message.content,
-					message.author.displayName,
-					"ignore",
-					ctx,
-				).catch((e) => console.error("[reflection] fire-and-forget error:", e));
-				break;
-			}
-
-			case "engage": {
-				// エージェントループ起動
-				const guild = message.guild;
-				if (!guild) break;
-
-				const agentCtx: AgentContext = {
-					triggerMessage: message,
-					channel: message.channel,
-					guild,
-					triggeredBy: "triage",
-				};
-				await runAgentLoop(agentCtx);
-				break;
-			}
-		}
-	} catch (error) {
-		console.error("[messageCreate] Triage handler error:", error);
-	}
+	bufferMessage(message, mentioned);
 }
