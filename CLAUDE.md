@@ -52,7 +52,7 @@ src/
 │   ├── dream.ts          # 夢処理 (記憶の連想分析・洞察生成)
 │   ├── message-dedup.ts  # メッセージ重複抑制 (SHA-256 + 24時間キャッシュ)
 │   └── prompts/
-│       ├── system.ts     # SOUL_PROMPT (不変の本質) + IDENTITY_PROMPT (行動指針)
+│       ├── system.ts     # SURFACE_PROMPT (軽量要約) + SOUL_PROMPT (不変の本質) + IDENTITY_PROMPT (行動指針)
 │       └── personality.ts # 可変プロンプト (4次元気分ベクトル + personality.json)
 ├── scheduler/
 │   ├── index.ts          # cron スケジューラー
@@ -108,6 +108,7 @@ data/
 
 | ツール名 | パラメータ | 説明 |
 |---------|-----------|------|
+| `recall_identity` | (なし) | SOUL_PROMPT + IDENTITY_PROMPT の全文を参照（行動に迷った時に呼ぶ） |
 | `save_memory` | `entry`, `emotional_impact?` | 長期記憶に保存（30字以内、感情インパクト1-5） |
 | `save_user_note` | `username`, `note` | ユーザーメモ保存 |
 | `update_personality` | `mood?`, `recent_topics?`, `interests?` | 性格設定更新（mood は4次元ベクトル） |
@@ -131,10 +132,11 @@ data/
                                     (* メンション時はスロットルをバイパス)
   トリアージ結果:
   ├─ ignore:  reflection LLM(flash, fire-and-forget) → personality + memory 更新
-  └─ engage:  エージェントループ起動
-       ├─ LLM に tools 定義 + SOUL + IDENTITY + personality + MEMORY + 会話履歴を送信 (4層構成)
+  └─ engage:  エージェントループ起動 (自動 typing インジケーター開始)
+       ├─ LLM に tools 定義 + SURFACE + personality + MEMORY + 会話履歴を送信 (軽量構成)
        ├─ tool_calls → 各ツール実行 → 結果を LLM に返す → ループ
-       └─ finish_reason=stop → 終了（最大5イテレーション）
+       ├─ LLM が必要時に recall_identity ツールで SOUL + IDENTITY の詳細を参照
+       └─ finish_reason=stop → 終了（最大5イテレーション）+ typing インジケーター停止
 
 cron (10分) → heartbeat タスクチェック → アクティブ時間帯判定
   ├─ autonomous_post (10分): アクティブ時間内のみ → 重複チェック → エージェントループ
@@ -156,7 +158,8 @@ cron (10分) → heartbeat タスクチェック → アクティブ時間帯判
 - **4次元気分ベクトル**: energy/positivity/sociability/curiosity (各0-1)。時間帯で energy 自動変動、急変防止の補間（70% new + 30% old）
 - **感情付き記憶**: MemoryEntry に emotional_impact (1-5) + created_at。エビングハウス忘却曲線（30日半減期）でスコアリング
 - **夢処理**: 12時間ごとに記憶を連想分析。洞察を [dream] タグ付き記憶として追加、不要記憶を整理
-- **SOUL/IDENTITY 分離**: 不変の本質（SOUL_PROMPT）と可変の行動指針（IDENTITY_PROMPT）を分離。プロンプト4層構成
+- **プロンプト階層化**: 軽量な SURFACE_PROMPT を毎回送信、詳細な SOUL_PROMPT + IDENTITY_PROMPT は recall_identity ツールでオンデマンド参照。トークン消費を ~1250t 削減
+- **自動 typing インジケーター**: エージェントループ中は5秒間隔で sendTyping() を呼び、Discord 上に「入力中…」を表示
 
 ### DB テーブル
 
