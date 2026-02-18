@@ -18,6 +18,7 @@ services:
       - "3001:3000"
     volumes:
       - aiclient-configs:/app/configs
+      - ~/.gemini:/root/.gemini:ro
     restart: unless-stopped
 
 volumes:
