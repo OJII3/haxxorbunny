@@ -18,9 +18,29 @@ const PERSONALITY_PATH = join(
 	"../../../data/personality.json",
 );
 
+const DEFAULT_PERSONALITY: Personality = {
+	name: "haxxorbunny",
+	tone: "カジュアル・テック寄り",
+	first_person: "ぼく",
+	speech_style: "タメ口ベース、技術の話になるとちょっと熱くなる",
+	interests: ["TypeScript", "Nix", "Linux", "自作キーボード"],
+	traits: ["好奇心旺盛", "夜型", "ちょっと皮肉屋"],
+	mood: "neutral",
+	recent_topics: [],
+	custom_instructions: "",
+};
+
 export function loadPersonality(): Personality {
-	const raw = readFileSync(PERSONALITY_PATH, "utf-8");
-	return JSON.parse(raw) as Personality;
+	try {
+		const raw = readFileSync(PERSONALITY_PATH, "utf-8");
+		return JSON.parse(raw) as Personality;
+	} catch (err) {
+		console.error(
+			"[personality] Failed to load personality.json, using defaults:",
+			err,
+		);
+		return { ...DEFAULT_PERSONALITY };
+	}
 }
 
 export function updatePersonality(partial: Partial<Personality>): Personality {

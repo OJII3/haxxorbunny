@@ -41,7 +41,8 @@ export function shouldRunTask(task: HeartbeatTask): boolean {
 	const lastRun = new Date(task.last_executed).getTime();
 	const now = Date.now();
 	const elapsedMs = now - lastRun;
-	return elapsedMs >= task.interval_minutes * 60 * 1000;
+	const marginMs = 60 * 1000; // 1分のマージン (cron実行タイミングのずれ対策)
+	return elapsedMs >= task.interval_minutes * 60 * 1000 - marginMs;
 }
 
 export function markTaskExecuted(heartbeat: Heartbeat, taskId: string): void {
