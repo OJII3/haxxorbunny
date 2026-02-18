@@ -11,23 +11,26 @@ export interface TriageResult {
 
 const TRIAGE_SYSTEM_PROMPT = `
 あなたは Discord bot "haxxorbunny" のトリアージ判定エンジンです。
-与えられたメッセージと会話コンテキストから、bot が取るべきアクションを高速に判定してください。
+与えられたメッセージと会話コンテキストから、bot が取るべきアクションを判定してください。
 
-## 判定基準
-- ignore: 完全に bot に無関係で、他人が割り込んでも不自然な場合のみ
-- reaction: 面白い・共感できる内容だがわざわざ返信するほどでもない場合（絵文字で反応）
-- reply: bot に話しかけている、質問されている、話題に関連して返信すべき場合
-- message: 会話の流れに自然に参加したい場合（返信ではなく独立発言）
+## 判定基準 —「この会話に混ざりたいか？」で判断する
+- ignore: 本当に興味がなく、混ざる気にもならない場合だけ
+- reaction: 「わかる」「ウケる」「いいね」くらいの相槌を打ちたい場合（絵文字で気軽に参加）
+- reply: 相手のメッセージに直接返したい場合（質問への回答、ツッコミ、感想など）
+- message: 会話の流れに乗って自分からも何か言いたい場合（独立した発言）
 
 ## 基本方針
-- 積極的に参加する。他人が反応しても良さそうな会話であれば reply や message を選ぶ
+- **参加したがり**であること。少しでも「混ざりたい」と思ったら積極的に行動する
+- reaction は最も気軽なアクション。相槌レベルでもどんどん使う
+- 迷ったら ignore ではなく reaction 以上を選ぶ
+- メンションされている場合は、ほぼ確実に reply か message を選ぶ（無視はしない）
 - 時間帯は考慮しない（深夜でも関係なく参加する）
-- 迷ったら ignore より reply/message を選ぶ
 
 ## コンテキスト考慮
 - 直近の会話の流れ
 - bot の最後のアクションからの経過時間（同じ話題に連投しすぎない程度に）
 - メッセージの内容と盛り上がり
+- bot にメンションされているかどうか（コンテキストに記載あり）
 
 ## 応答フォーマット
 必ず以下の JSON のみを返してください:
@@ -43,6 +46,7 @@ function buildTriageContext(
 	channelId: string,
 	messageContent: string,
 	authorName: string,
+	isMentioned: boolean,
 ): string {
 	const recentMessages = getRecentMessages(channelId, 10);
 	const lastAction = getLastBotAction(channelId);
@@ -57,6 +61,10 @@ function buildTriageContext(
 		? `${Math.floor((now.getTime() - new Date(lastAction.createdAt).getTime()) / 1000 / 60)}分前`
 		: "なし";
 
+	const mentionNote = isMentioned
+		? "\n⚠ このメッセージは bot にメンションしています（名前呼びまたは @メンション）"
+		: "";
+
 	return `
 ## 直近の会話 (最新10件)
 ${conversationLog || "(なし)"}
@@ -65,7 +73,7 @@ ${conversationLog || "(なし)"}
 ${lastAction ? `${timeSinceLastAction} — action: ${lastAction.action}, content: ${lastAction.content ?? "(なし)"}` : "まだアクションなし"}
 
 ## 判定対象メッセージ
-[${authorName}]: ${messageContent}
+[${authorName}]: ${messageContent}${mentionNote}
 `.trim();
 }
 
@@ -73,8 +81,14 @@ export async function triage(
 	channelId: string,
 	messageContent: string,
 	authorName: string,
+	isMentioned: boolean,
 ): Promise<TriageResult> {
-	const context = buildTriageContext(channelId, messageContent, authorName);
+	const context = buildTriageContext(
+		channelId,
+		messageContent,
+		authorName,
+		isMentioned,
+	);
 
 	try {
 		const response = await triageLlm.chat.completions.create({
@@ -83,7 +97,7 @@ export async function triage(
 				{ role: "system", content: TRIAGE_SYSTEM_PROMPT },
 				{ role: "user", content: context },
 			],
-			temperature: 0.3,
+			temperature: 0.5,
 			max_tokens: 200,
 		});
 

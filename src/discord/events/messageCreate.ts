@@ -89,26 +89,20 @@ export async function handleMessageCreate(message: Message): Promise<void> {
 	// Bot のメッセージは無視
 	if (message.author.bot) return;
 
-	// メンション → バイパス → メイン LLM → reply
-	if (isMentioned(message)) {
-		try {
-			await handleMainLLM(message, "mention");
-		} catch (error) {
-			console.error("[messageCreate] Mention handler error:", error);
-		}
+	const mentioned = isMentioned(message);
+
+	// スロットル判定（メンション時はバイパス）
+	if (!mentioned && shouldThrottle(message.channelId)) {
 		return;
 	}
 
-	// その他 → スロットル判定 → トリアージ → アクション実行
-	if (shouldThrottle(message.channelId)) {
-		return;
-	}
-
+	// 全メッセージ → トリアージ → アクション実行
 	try {
 		const triageResult = await triage(
 			message.channelId,
 			message.content,
 			message.author.displayName,
+			mentioned,
 		);
 
 		console.log(
