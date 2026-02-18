@@ -6,6 +6,7 @@ import type { AgentContext } from "../agent/types.ts";
 import { client } from "../client.ts";
 import { getActiveChannelIds } from "../db/queries.ts";
 import { distillDailyMemory } from "../llm/distill.ts";
+import { processDream } from "../llm/dream.ts";
 import {
 	isWithinActiveHours,
 	loadHeartbeat,
@@ -99,6 +100,9 @@ async function runHeartbeatTasks(): Promise<void> {
 					break;
 				case "cleanup_old_memory":
 					cleanupOldMemory();
+					break;
+				case "dream_processing":
+					await processDream();
 					break;
 				default:
 					console.warn(`[heartbeat] Unknown task: ${task.id}`);
