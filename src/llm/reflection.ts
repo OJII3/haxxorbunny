@@ -67,7 +67,7 @@ ${conversationContext || "(なし)"}
 				{ role: "user", content: context },
 			],
 			temperature: 0.3,
-			max_tokens: 512,
+			max_tokens: 1024,
 		});
 
 		const raw = response.choices[0]?.message?.content?.trim();
@@ -86,7 +86,16 @@ ${conversationContext || "(なし)"}
 			return;
 		}
 
-		const result = JSON.parse(jsonMatch[0]) as ReflectionResult;
+		let result: ReflectionResult;
+		try {
+			result = JSON.parse(jsonMatch[0]) as ReflectionResult;
+		} catch {
+			console.warn(
+				"[reflection] Failed to parse JSON:",
+				jsonMatch[0].slice(0, 200),
+			);
+			return;
+		}
 
 		if (result.personality_update) {
 			const update: Partial<Personality> = {};
