@@ -1,5 +1,5 @@
 import type { Message } from "discord.js";
-import { runAgentLoop } from "../../agent/loop.ts";
+import { markActivity, runAgentLoop } from "../../agent/loop.ts";
 import type { AgentContext } from "../../agent/types.ts";
 import { client } from "../../client.ts";
 import { getRecentMessages, saveMessage } from "../../db/queries.ts";
@@ -15,6 +15,8 @@ function isMentioned(message: Message): boolean {
 
 	const lowerContent = message.content.toLowerCase();
 	if (lowerContent.includes("haxxorbunny")) return true;
+	if (lowerContent.includes("aiおかず")) return true;
+	if (message.content.includes("世界の泡の住人")) return true;
 
 	return false;
 }
@@ -36,6 +38,9 @@ export async function handleMessageCreate(message: Message): Promise<void> {
 
 	// Bot のメッセージは無視
 	if (message.author.bot) return;
+
+	// アクティビティ記録（人間のメッセージのみ）
+	markActivity();
 
 	const mentioned = isMentioned(message);
 

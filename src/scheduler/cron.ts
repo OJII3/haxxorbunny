@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { ChannelType, type Guild, type TextChannel } from "discord.js";
-import { isAgentBusy, runAgentLoop } from "../agent/loop.ts";
+import { hasRecentActivity, isAgentBusy, runAgentLoop } from "../agent/loop.ts";
 import type { AgentContext } from "../agent/types.ts";
 import { client } from "../client.ts";
 import { getActiveChannelIds } from "../db/queries.ts";
@@ -75,6 +75,13 @@ function cleanupOldMemory(): void {
 async function runHeartbeatTasks(): Promise<void> {
 	if (isAgentBusy()) {
 		console.log("[heartbeat] Skipped: agent is currently active");
+		return;
+	}
+
+	if (hasRecentActivity(5)) {
+		console.log(
+			"[heartbeat] Skipped: conversation active within last 5 minutes",
+		);
 		return;
 	}
 

@@ -24,6 +24,19 @@ export function isAgentBusy(): boolean {
 	return _agentBusy;
 }
 
+let _lastActivityAt = 0;
+
+/** メッセージ受信やエージェント実行時にアクティビティを記録する */
+export function markActivity(): void {
+	_lastActivityAt = Date.now();
+}
+
+/** 直近 minutes 分以内にアクティビティがあったかどうか */
+export function hasRecentActivity(minutes = 5): boolean {
+	if (_lastActivityAt === 0) return false;
+	return Date.now() - _lastActivityAt < minutes * 60 * 1000;
+}
+
 interface ConversationMessage {
 	role: "user" | "assistant";
 	content: string;
