@@ -1,0 +1,131 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+export interface Memory {
+	entries: string[];
+	user_notes: Record<string, string[]>;
+	last_updated: string;
+}
+
+interface DailyMemory {
+	date: string;
+	entries: string[];
+}
+
+const DATA_DIR = join(import.meta.dir, "../../data");
+const MEMORY_PATH = join(DATA_DIR, "memory.json");
+const DAILY_DIR = join(DATA_DIR, "memory");
+
+const MAX_ENTRIES = 100;
+const MAX_USER_NOTES = 10;
+const PROMPT_RECENT_ENTRIES = 20;
+
+function ensureDailyDir(): void {
+	if (!existsSync(DAILY_DIR)) {
+		mkdirSync(DAILY_DIR, { recursive: true });
+	}
+}
+
+export function loadMemory(): Memory {
+	try {
+		const raw = readFileSync(MEMORY_PATH, "utf-8");
+		return JSON.parse(raw) as Memory;
+	} catch {
+		const defaultMemory: Memory = {
+			entries: [],
+			user_notes: {},
+			last_updated: "",
+		};
+		saveMemory(defaultMemory);
+		return defaultMemory;
+	}
+}
+
+export function saveMemory(memory: Memory): void {
+	memory.last_updated = new Date().toISOString();
+	writeFileSync(MEMORY_PATH, JSON.stringify(memory, null, "\t"), "utf-8");
+}
+
+export function appendMemoryEntry(entry: string): void {
+	const memory = loadMemory();
+	memory.entries.push(entry);
+	if (memory.entries.length > MAX_ENTRIES) {
+		memory.entries = memory.entries.slice(-MAX_ENTRIES);
+	}
+	saveMemory(memory);
+	appendDailyEntry(entry);
+	console.log("[memory] Added:", entry);
+}
+
+export function addUserNote(username: string, note: string): void {
+	const memory = loadMemory();
+	if (!memory.user_notes[username]) {
+		memory.user_notes[username] = [];
+	}
+	memory.user_notes[username].push(note);
+	if (memory.user_notes[username].length > MAX_USER_NOTES) {
+		memory.user_notes[username] = memory.user_notes[username].slice(
+			-MAX_USER_NOTES,
+		);
+	}
+	saveMemory(memory);
+	console.log(`[memory] User note for ${username}:`, note);
+}
+
+export function memoryToPrompt(memory: Memory): string {
+	const recentEntries = memory.entries.slice(-PROMPT_RECENT_ENTRIES);
+
+	let prompt = "\n## 記憶 (MEMORY)\n";
+
+	if (recentEntries.length > 0) {
+		prompt += "### 最近の記憶\n";
+		for (const entry of recentEntries) {
+			prompt += `- ${entry}\n`;
+		}
+	}
+
+	const usernames = Object.keys(memory.user_notes);
+	if (usernames.length > 0) {
+		prompt += "### ユーザーメモ\n";
+		for (const username of usernames) {
+			const notes = memory.user_notes[username] ?? [];
+			if (notes.length > 0) {
+				prompt += `- ${username}: ${notes.join(" / ")}\n`;
+			}
+		}
+	}
+
+	if (recentEntries.length === 0 && usernames.length === 0) {
+		prompt += "(まだ記憶はありません)\n";
+	}
+
+	return prompt;
+}
+
+function todayKey(): string {
+	return new Date().toISOString().slice(0, 10);
+}
+
+export function appendDailyEntry(entry: string): void {
+	ensureDailyDir();
+	const key = todayKey();
+	const daily = loadDailyMemory(key);
+	daily.entries.push(entry);
+	saveDailyMemory(key, daily);
+}
+
+export function loadDailyMemory(dateKey: string): DailyMemory {
+	const filePath = join(DAILY_DIR, `${dateKey}.json`);
+	try {
+		const raw = readFileSync(filePath, "utf-8");
+		return JSON.parse(raw) as DailyMemory;
+	} catch {
+		return { date: dateKey, entries: [] };
+	}
+}
+
+export function saveDailyMemory(dateKey: string, daily: DailyMemory): void {
+	ensureDailyDir();
+	const filePath = join(DAILY_DIR, `${dateKey}.json`);
+	writeFileSync(filePath, JSON.stringify(daily, null, "\t"), "utf-8");
+}

@@ -1,3 +1,5 @@
+import { existsSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { ChannelType, type Guild, type TextChannel } from "discord.js";
 import { client } from "../client.ts";
 import { config } from "../config.ts";
@@ -8,6 +10,18 @@ import {
 } from "../db/queries.ts";
 import type { LLMResponse } from "../llm/chat.ts";
 import { llm } from "../llm/client.ts";
+import { distillDailyMemory } from "../llm/distill.ts";
+import {
+	loadHeartbeat,
+	markTaskExecuted,
+	shouldRunTask,
+} from "../llm/heartbeat.ts";
+import {
+	addUserNote,
+	appendMemoryEntry,
+	loadMemory,
+	memoryToPrompt,
+} from "../llm/memory.ts";
 import {
 	loadPersonality,
 	personalityToPrompt,
@@ -23,10 +37,25 @@ function selectChannel(guild: Guild): TextChannel | undefined {
 			return ch as TextChannel;
 		}
 	}
-	// フォールバック: Guild 内の最初のテキストチャンネル
 	return guild.channels.cache.find((ch) => ch.type === ChannelType.GuildText) as
 		| TextChannel
 		| undefined;
+}
+
+function processMemoryFields(parsed: LLMResponse): void {
+	if (parsed.memory_entry) {
+		appendMemoryEntry(parsed.memory_entry);
+	}
+	if (parsed.user_note) {
+		const colonIndex = parsed.user_note.indexOf(":");
+		if (colonIndex > 0) {
+			const username = parsed.user_note.slice(0, colonIndex).trim();
+			const note = parsed.user_note.slice(colonIndex + 1).trim();
+			if (username && note) {
+				addUserNote(username, note);
+			}
+		}
+	}
 }
 
 async function postToGuild(guild: Guild): Promise<void> {
@@ -40,6 +69,8 @@ async function postToGuild(guild: Guild): Promise<void> {
 
 	const personality = loadPersonality();
 	const personalityPrompt = personalityToPrompt(personality);
+	const memory = loadMemory();
+	const memoryPrompt = memoryToPrompt(memory);
 	const now = new Date();
 
 	const response = await llm.chat.completions.create({
@@ -47,7 +78,7 @@ async function postToGuild(guild: Guild): Promise<void> {
 		messages: [
 			{
 				role: "system",
-				content: `${SYSTEM_PROMPT}\n\n${personalityPrompt}`,
+				content: `${SYSTEM_PROMPT}\n\n${personalityPrompt}\n${memoryPrompt}`,
 			},
 			{
 				role: "user",
@@ -84,6 +115,8 @@ async function postToGuild(guild: Guild): Promise<void> {
 			console.log("[cron/personality] Updated:", parsed.personality_update);
 		}
 
+		processMemoryFields(parsed);
+
 		saveBotAction({
 			action: parsed.action,
 			channelId: channel.id,
@@ -103,13 +136,65 @@ async function postToGuild(guild: Guild): Promise<void> {
 	}
 }
 
-async function autonomousPost(): Promise<void> {
-	const guilds = client.guilds.cache;
-	console.log(`[cron] 自主発言チェック開始: ${guilds.size} Guild(s)`);
+const DAILY_DIR = join(import.meta.dir, "../../data/memory");
+const MAX_DAILY_FILES = 30;
 
-	for (const guild of guilds.values()) {
-		await postToGuild(guild);
+function cleanupOldMemory(): void {
+	if (!existsSync(DAILY_DIR)) return;
+
+	const files = readdirSync(DAILY_DIR)
+		.filter((f) => f.endsWith(".json"))
+		.sort();
+
+	if (files.length <= MAX_DAILY_FILES) {
+		console.log(
+			`[cleanup] ${files.length} daily files, within limit (${MAX_DAILY_FILES})`,
+		);
+		return;
+	}
+
+	const toRemove = files.slice(0, files.length - MAX_DAILY_FILES);
+	for (const file of toRemove) {
+		const filePath = join(DAILY_DIR, file);
+		Bun.file(filePath).delete();
+		console.log(`[cleanup] Removed old daily memory: ${file}`);
+	}
+	console.log(`[cleanup] Removed ${toRemove.length} old daily files`);
+}
+
+async function runHeartbeatTasks(): Promise<void> {
+	const heartbeat = loadHeartbeat();
+
+	for (const task of heartbeat.tasks) {
+		if (!shouldRunTask(task)) continue;
+
+		console.log(`[heartbeat] Running task: ${task.id}`);
+
+		try {
+			switch (task.id) {
+				case "autonomous_post": {
+					const guilds = client.guilds.cache;
+					for (const guild of guilds.values()) {
+						await postToGuild(guild);
+					}
+					break;
+				}
+				case "distill_memory":
+					await distillDailyMemory();
+					break;
+				case "cleanup_old_memory":
+					cleanupOldMemory();
+					break;
+				default:
+					console.warn(`[heartbeat] Unknown task: ${task.id}`);
+			}
+
+			markTaskExecuted(heartbeat, task.id);
+			console.log(`[heartbeat] Completed task: ${task.id}`);
+		} catch (error) {
+			console.error(`[heartbeat] Error in task ${task.id}:`, error);
+		}
 	}
 }
 
-export { autonomousPost };
+export { runHeartbeatTasks as autonomousPost };

@@ -37,3 +37,4 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 # data (DB is local-only)
 data/*.db
 data/*.db-journal
+data/memory/
