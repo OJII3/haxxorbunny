@@ -16,9 +16,11 @@ services:
     container_name: haxxorbunny-aiclient
     ports:
       - "3001:3000"
+      - "8085:8085"
+      - "8086:8086"
     volumes:
       - aiclient-configs:/app/configs
-      - ~/.gemini:/root/.gemini:ro
+      - ${HOME}/.gemini:/root/.gemini:ro
     restart: unless-stopped
 
 volumes:
