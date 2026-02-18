@@ -13,7 +13,7 @@ import {
 	loadPersonality,
 	personalityToPrompt,
 } from "../llm/prompts/personality.ts";
-import { SYSTEM_PROMPT } from "../llm/prompts/system.ts";
+import { IDENTITY_PROMPT, SOUL_PROMPT } from "../llm/prompts/system.ts";
 import { getToolHandler, toolSpecs } from "./tools/index.ts";
 import type { AgentContext } from "./types.ts";
 
@@ -38,7 +38,8 @@ export async function runAgentLoop(ctx: AgentContext): Promise<void> {
 	const memory = loadMemory();
 	const memoryPrompt = memoryToPrompt(memory);
 
-	const systemPrompt = `${SYSTEM_PROMPT}\n\n${personalityPrompt}\n${memoryPrompt}`;
+	// 4層構成: SOUL → IDENTITY → personality → memory
+	const systemPrompt = `${SOUL_PROMPT}\n\n${IDENTITY_PROMPT}\n\n${personalityPrompt}\n${memoryPrompt}`;
 
 	// 会話履歴を構築
 	const messages: Array<{
