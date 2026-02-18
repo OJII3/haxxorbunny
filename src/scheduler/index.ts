@@ -1,14 +1,14 @@
 import cron from "node-cron";
-import { autonomousPost } from "./cron.ts";
+import { runHeartbeatTasks } from "./cron.ts";
 
 export function startScheduler(): void {
-	// 30分ごとに自主発言の判定を行う
+	// 30分ごとに heartbeat タスクを実行
 	cron.schedule("*/30 * * * *", () => {
-		console.log("[scheduler] Running autonomous post check...");
-		autonomousPost().catch((err) => {
-			console.error("[scheduler] Error in autonomous post:", err);
+		console.log("[scheduler] Running heartbeat tasks...");
+		runHeartbeatTasks().catch((err) => {
+			console.error("[scheduler] Error in heartbeat tasks:", err);
 		});
 	});
 
-	console.log("[scheduler] Started (every 30 min)");
+	console.log("[scheduler] Started (every 30 min, heartbeat-based)");
 }

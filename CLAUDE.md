@@ -36,22 +36,30 @@ src/
 ├── llm/
 │   ├── client.ts         # メイン LLM OpenAI SDK ラッパー
 │   ├── triage-client.ts  # トリアージ LLM 専用クライアント
-│   ├── chat.ts           # メイン LLM チャット呼び出し
+│   ├── chat.ts           # メイン LLM チャット呼び出し (MEMORY注入)
 │   ├── triage.ts         # トリアージ判定ロジック + プロンプト
 │   ├── triage-throttle.ts # チャンネルごとのスロットリング
+│   ├── reflection.ts     # triage後の軽量reflection (人格・記憶更新)
+│   ├── memory.ts         # 記憶管理 (load/save/append/toPrompt)
+│   ├── heartbeat.ts      # 定期タスク管理
+│   ├── distill.ts        # 記憶蒸留 (日次→長期)
 │   └── prompts/
 │       ├── system.ts     # 不変システムプロンプト
 │       └── personality.ts # 可変プロンプト (personality.json)
 ├── scheduler/
 │   ├── index.ts          # cron スケジューラー
-│   └── cron.ts           # 自主発言ロジック
+│   └── cron.ts           # heartbeatタスク統合 (自主発言・蒸留・整理)
 └── db/
     ├── index.ts          # DB 接続
     ├── schema.ts         # Drizzle スキーマ
     ├── migrate.ts        # テーブル作成
     └── queries.ts        # クエリヘルパー
 data/
-├── personality.json      # 可変プロンプト (bot が自己更新可能)
+├── personality.json      # SOUL: 可変プロンプト (bot が自己更新可能)
+├── memory.json           # MEMORY: 長期記憶 (bot が自動更新)
+├── heartbeat.json        # HEARTBEAT: 定期タスク設定
+├── memory/               # 日次記憶蒸留 (gitignore)
+│   └── YYYY-MM-DD.json
 └── haxxorbunny.db        # SQLite DB (gitignore)
 ```
 
@@ -67,6 +75,8 @@ data/
   "content": "メッセージ内容 (message/reply)",
   "emoji": "リアクション絵文字 (reaction)",
   "personality_update": null | { ...部分更新 },
+  "memory_entry": null | "覚えておきたいこと（30字以内）",
+  "user_note": null | "username:メモ内容",
   "reasoning": "行動の理由（内部ログ用）"
 }
 ```
@@ -90,18 +100,24 @@ data/
 メッセージ受信 → DB保存 → Bot除外 → スロットル判定(*) → トリアージLLM(高速) → 判定
                                     (* メンション時はスロットルをバイパス)
   トリアージ結果:
-  ├─ ignore: 何もしない
-  ├─ reaction: トリアージが絵文字選択（メインLLM不要）
-  ├─ reply: メインLLM → message.reply()
-  └─ message: メインLLM → channel.send()
+  ├─ ignore:    reflection LLM(flash, fire-and-forget) → personality + memory 更新
+  ├─ reaction:  リアクション + reflection LLM(flash, fire-and-forget) → personality + memory 更新
+  ├─ reply:     メインLLM(SOUL+MEMORY注入) → message.reply() + personality + memory 更新
+  └─ message:   メインLLM(SOUL+MEMORY注入) → channel.send() + personality + memory 更新
+
+cron (30分) → heartbeat タスクチェック
+  ├─ autonomous_post (30分): メインLLM(SOUL+MEMORY注入) → 投稿 + personality + memory 更新
+  ├─ distill_memory (6時間): 蒸留LLM(flash) → 日次記憶集約 + 長期記憶更新
+  └─ cleanup_old_memory (24時間): 古い日次ファイルの整理
 ```
 
 - メンションかどうかに関わらず、全メッセージがトリアージを通る統一フロー
 - メンション情報はトリアージのコンテキストとして渡され、判断材料として使われる
 - トリアージは「この会話に混ざりたいか」を基準に判定する
+- **全イベントで人格(SOUL)と記憶(MEMORY)が更新される** (ignore/reaction時はreflection LLMが担当)
 
-1. **メッセージ受信** → DB 保存 → スロットル判定 → トリアージ LLM（メンション情報含む） → アクション実行
-2. **自主発言** → 30分ごとに cron → メイン LLM に問い合わせ → 投稿 or スキップ
+1. **メッセージ受信** → DB 保存 → スロットル判定 → トリアージ LLM（メンション情報含む） → アクション実行 + 人格・記憶更新
+2. **定期タスク** → 30分ごとに heartbeat → 自主発言・記憶蒸留・古いファイル整理
 
 ### DB テーブル
 
@@ -149,7 +165,7 @@ podman-compose ps
 
 ### データ永続化
 
-- `bot-data` ボリューム → `/app/data`（SQLite DB, personality.json）
+- `bot-data` ボリューム → `/app/data`（SQLite DB, personality.json, memory.json, heartbeat.json, memory/）
 - `aiclient-configs` ボリューム → aiclient 設定
 
 ## コーディング規約

@@ -1,6 +1,7 @@
 import type { Message } from "discord.js";
 import { config } from "../config.ts";
 import { llm } from "./client.ts";
+import { loadMemory, memoryToPrompt, processMemoryFields } from "./memory.ts";
 import {
 	loadPersonality,
 	type Personality,
@@ -14,6 +15,8 @@ export interface LLMResponse {
 	content?: string;
 	emoji?: string;
 	personality_update?: Partial<Personality> | null;
+	memory_entry?: string | null;
+	user_note?: string | null;
 	reasoning?: string;
 }
 
@@ -35,8 +38,10 @@ export async function chat(
 ): Promise<LLMResponse> {
 	const personality = loadPersonality();
 	const personalityPrompt = personalityToPrompt(personality);
+	const memory = loadMemory();
+	const memoryPrompt = memoryToPrompt(memory);
 
-	const systemPrompt = `${SYSTEM_PROMPT}\n\n${personalityPrompt}`;
+	const systemPrompt = `${SYSTEM_PROMPT}\n\n${personalityPrompt}\n${memoryPrompt}`;
 
 	const history = buildConversationHistory(recentMessages);
 
@@ -68,6 +73,8 @@ export async function chat(
 			updatePersonality(parsed.personality_update);
 			console.log("[personality] Updated:", parsed.personality_update);
 		}
+
+		processMemoryFields(parsed);
 
 		return parsed;
 	} catch {

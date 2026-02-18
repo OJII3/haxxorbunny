@@ -1,0 +1,23 @@
+{
+	"tasks": [
+		{
+			"id": "autonomous_post",
+			"description": "自主的に独り言を投稿する",
+			"interval_minutes": 30,
+			"enabled": true
+		},
+		{
+			"id": "distill_memory",
+			"description": "日次記憶を蒸留して長期記憶に反映する",
+			"interval_minutes": 360,
+			"enabled": true
+		},
+		{
+			"id": "cleanup_old_memory",
+			"description": "古い日次記憶ファイルを整理する",
+			"interval_minutes": 1440,
+			"enabled": true
+		}
+	],
+	"last_run": ""
+}

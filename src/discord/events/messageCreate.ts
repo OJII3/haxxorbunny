@@ -1,7 +1,12 @@
 import type { Message } from "discord.js";
 import { client } from "../../client.ts";
-import { saveBotAction, saveMessage } from "../../db/queries.ts";
+import {
+	getRecentMessages,
+	saveBotAction,
+	saveMessage,
+} from "../../db/queries.ts";
 import { chat } from "../../llm/chat.ts";
+import { reflect } from "../../llm/reflection.ts";
 import { triage } from "../../llm/triage.ts";
 import { shouldThrottle } from "../../llm/triage-throttle.ts";
 
@@ -20,6 +25,11 @@ function isMentioned(message: Message): boolean {
 async function fetchRecentMessages(message: Message): Promise<Message[]> {
 	const fetched = await message.channel.messages.fetch({ limit: 20 });
 	return [...fetched.values()].reverse();
+}
+
+function buildConversationContext(channelId: string): string {
+	const messages = getRecentMessages(channelId, 10);
+	return messages.map((m) => `[${m.username}]: ${m.content}`).join("\n");
 }
 
 async function handleMainLLM(
@@ -110,8 +120,18 @@ export async function handleMessageCreate(message: Message): Promise<void> {
 		);
 
 		switch (triageResult.action) {
-			case "ignore":
+			case "ignore": {
+				// ignore でも reflection で人格・記憶を更新 (fire-and-forget)
+				const ctx = buildConversationContext(message.channelId);
+				reflect(
+					message.channelId,
+					message.content,
+					message.author.displayName,
+					"ignore",
+					ctx,
+				).catch((e) => console.error("[reflection] fire-and-forget error:", e));
 				break;
+			}
 
 			case "reaction":
 				if (triageResult.emoji) {
@@ -124,10 +144,24 @@ export async function handleMessageCreate(message: Message): Promise<void> {
 						triggeredBy: "triage",
 					});
 				}
+				// reaction 後にも reflection (fire-and-forget)
+				{
+					const ctx = buildConversationContext(message.channelId);
+					reflect(
+						message.channelId,
+						message.content,
+						message.author.displayName,
+						"reaction",
+						ctx,
+					).catch((e) =>
+						console.error("[reflection] fire-and-forget error:", e),
+					);
+				}
 				break;
 
 			case "reply":
 			case "message":
+				// メインLLM が memory_entry/user_note を処理するので reflection 不要
 				await handleMainLLM(message, "triage");
 				break;
 		}
