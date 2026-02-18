@@ -1,11 +1,6 @@
 import type { Message } from "discord.js";
-import { client } from "../client.ts";
 import { config } from "../config.ts";
-import {
-	getRecentMessages,
-	saveBotAction,
-	saveMessage,
-} from "../db/queries.ts";
+import { getRecentMessages, saveBotAction } from "../db/queries.ts";
 import { llm } from "../llm/client.ts";
 import { loadMemory, memoryToPrompt } from "../llm/memory.ts";
 import {
@@ -144,45 +139,14 @@ export async function runAgentLoop(ctx: AgentContext): Promise<void> {
 					: undefined,
 		});
 
-		// ツール呼び出しがなければ終了
+		// ツール呼び出しがなければ終了（テキストのみの応答は送信しない）
 		if (functionToolCalls.length === 0) {
-			// フォールバック: LLM がテキストだけ返した場合、自動で送信する
 			const textContent = assistantMessage.content?.trim();
-			if (textContent && !messageSent) {
+			if (textContent) {
 				console.log(
-					"[agent] Fallback: LLM returned text without tool calls, sending as message",
+					"[agent] LLM returned text without tool calls, discarding (not sending):",
+					textContent.slice(0, 100),
 				);
-				if (ctx.triggerMessage) {
-					try {
-						await ctx.triggerMessage.reply(textContent);
-						saveMessage({
-							channelId: ctx.channel.id,
-							userId: client.user?.id ?? "bot",
-							username: "haxxorbunny",
-							content: textContent,
-							isBot: true,
-						});
-						executedTools.push("reply_to_message(fallback)");
-						messageSent = true;
-					} catch (e) {
-						console.error("[agent] Fallback reply failed:", e);
-					}
-				} else if (ctx.channel.isSendable()) {
-					try {
-						await ctx.channel.send(textContent);
-						saveMessage({
-							channelId: ctx.channel.id,
-							userId: client.user?.id ?? "bot",
-							username: "haxxorbunny",
-							content: textContent,
-							isBot: true,
-						});
-						executedTools.push("send_message(fallback)");
-						messageSent = true;
-					} catch (e) {
-						console.error("[agent] Fallback send failed:", e);
-					}
-				}
 			}
 			console.log(
 				`[agent] Finished after ${i + 1} iteration(s) (no tool calls)`,

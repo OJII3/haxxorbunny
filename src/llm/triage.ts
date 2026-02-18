@@ -121,21 +121,14 @@ export async function triage(
 			.replace(/\n?```\s*$/i, "");
 		const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
 		if (!jsonMatch) {
-			// 切り詰められた JSON から action だけでも抽出を試みる
-			const actionMatch = raw.match(/"action"\s*:\s*"(ignore|engage)/);
-			if (actionMatch) {
-				const action = actionMatch[1] as TriageResult["action"];
-				console.warn("[triage] Truncated response, extracted action:", action);
-				return {
-					action,
-					reasoning: "Truncated triage response",
-					confidence: 0.5,
-				};
-			}
-			console.warn("[triage] No JSON found in response:", raw);
+			// JSON パース不能な応答は信頼できないので ignore にフォールバック
+			console.warn(
+				"[triage] No valid JSON in response, defaulting to ignore:",
+				raw,
+			);
 			return {
 				action: "ignore",
-				reasoning: "No JSON in triage response",
+				reasoning: "No valid JSON in triage response, defaulting to ignore",
 				confidence: 0,
 			};
 		}
