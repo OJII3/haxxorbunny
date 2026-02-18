@@ -109,6 +109,46 @@ data/
 
 `.env.example` 参照。必須: `DISCORD_TOKEN`, `DISCORD_APP_ID`
 
+## デプロイ（Podman Compose / ローカル）
+
+### 前提条件
+
+- `podman` & `podman-compose` がインストール済み
+- `.env` ファイルがプロジェクトルートに存在（`.env.example` を参照して作成）
+- `~/.gemini/` に Gemini 認証情報（`oauth_creds.json` 等）が存在
+
+### デプロイコマンド
+
+```bash
+# 起動（ビルド込み・バックグラウンド）
+podman-compose up --build -d
+
+# 停止
+podman-compose down
+
+# 再デプロイ（停止→ビルド→起動）
+podman-compose down && podman-compose up --build -d
+
+# ログ確認
+podman logs haxxorbunny          # bot
+podman logs haxxorbunny-aiclient # LLM API
+
+# ステータス確認
+podman-compose ps
+```
+
+### サービス構成
+
+| サービス | コンテナ名 | 説明 |
+|---------|-----------|------|
+| bot | haxxorbunny | Discord bot 本体 (Bun) |
+| aiclient | haxxorbunny-aiclient | LLM API (aiclient-2-api, Gemini) |
+
+### データ永続化
+
+- `bot-data` ボリューム → `/app/data`（SQLite DB, personality.json）
+- `aiclient-configs` ボリューム → aiclient 設定
+
 ## コーディング規約
 
 - Formatter: Biome (tab インデント)
