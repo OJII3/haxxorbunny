@@ -13,7 +13,7 @@ import {
 	loadPersonality,
 	personalityToPrompt,
 } from "../llm/prompts/personality.ts";
-import { IDENTITY_PROMPT, SOUL_PROMPT } from "../llm/prompts/system.ts";
+import { SURFACE_PROMPT } from "../llm/prompts/system.ts";
 import { getToolHandler, toolSpecs } from "./tools/index.ts";
 import type { AgentContext } from "./types.ts";
 
@@ -47,13 +47,32 @@ export async function runAgentLoop(ctx: AgentContext): Promise<void> {
 }
 
 async function _runAgentLoopInner(ctx: AgentContext): Promise<void> {
+	// typing インジケーター: LLM 応答中にユーザーへ「入力中…」を表示
+	const sendTypingSafe = () => {
+		if ("sendTyping" in ctx.channel) {
+			(ctx.channel as { sendTyping: () => Promise<void> })
+				.sendTyping()
+				.catch((e) => console.warn("[agent] sendTyping failed:", e));
+		}
+	};
+	sendTypingSafe();
+	const typingInterval = setInterval(sendTypingSafe, 5_000);
+
+	try {
+		return await _runAgentLoopBody(ctx);
+	} finally {
+		clearInterval(typingInterval);
+	}
+}
+
+async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 	const personality = loadPersonality();
 	const personalityPrompt = personalityToPrompt(personality);
 	const memory = loadMemory();
 	const memoryPrompt = memoryToPrompt(memory);
 
-	// 4層構成: SOUL → IDENTITY → personality → memory
-	const systemPrompt = `${SOUL_PROMPT}\n\n${IDENTITY_PROMPT}\n\n${personalityPrompt}\n${memoryPrompt}`;
+	// 軽量構成: SURFACE → personality → memory (詳細は recall_identity ツールで参照)
+	const systemPrompt = `${SURFACE_PROMPT}\n\n${personalityPrompt}\n${memoryPrompt}`;
 
 	// 会話履歴を構築
 	const messages: Array<{
