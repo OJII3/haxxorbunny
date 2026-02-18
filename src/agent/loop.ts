@@ -1,6 +1,11 @@
 import type { Message } from "discord.js";
+import { client } from "../client.ts";
 import { config } from "../config.ts";
-import { getRecentMessages, saveBotAction } from "../db/queries.ts";
+import {
+	getRecentMessages,
+	saveBotAction,
+	saveMessage,
+} from "../db/queries.ts";
 import { llm } from "../llm/client.ts";
 import { loadMemory, memoryToPrompt } from "../llm/memory.ts";
 import {
@@ -139,14 +144,28 @@ export async function runAgentLoop(ctx: AgentContext): Promise<void> {
 					: undefined,
 		});
 
-		// ツール呼び出しがなければ終了（テキストのみの応答は送信しない）
+		// ツール呼び出しがなければ、テキストを send_message で送信（reply ではなく）
 		if (functionToolCalls.length === 0) {
 			const textContent = assistantMessage.content?.trim();
-			if (textContent) {
+			if (textContent && !messageSent && ctx.channel.isSendable()) {
 				console.log(
-					"[agent] LLM returned text without tool calls, discarding (not sending):",
+					"[agent] Fallback: sending text as send_message (not reply):",
 					textContent.slice(0, 100),
 				);
+				try {
+					await ctx.channel.send(textContent);
+					saveMessage({
+						channelId: ctx.channel.id,
+						userId: client.user?.id ?? "bot",
+						username: "haxxorbunny",
+						content: textContent,
+						isBot: true,
+					});
+					executedTools.push("send_message(fallback)");
+					messageSent = true;
+				} catch (e) {
+					console.error("[agent] Fallback send failed:", e);
+				}
 			}
 			console.log(
 				`[agent] Finished after ${i + 1} iteration(s) (no tool calls)`,

@@ -35,12 +35,8 @@ const TRIAGE_SYSTEM_PROMPT = `
 - bot にメンションされているかどうか（コンテキストに記載あり）
 
 ## 応答フォーマット
-必ず以下の JSON のみを返してください:
-{
-  "action": "ignore" | "engage",
-  "reasoning": "判定理由（短く）",
-  "confidence": 0.0〜1.0
-}
+JSON のみを返すこと。それ以外のテキストは一切不要。reasoning は10字以内。
+{"action":"ignore","reasoning":"理由","confidence":0.8}
 `.trim();
 
 function buildTriageContext(
@@ -98,8 +94,8 @@ export async function triage(
 				{ role: "system", content: TRIAGE_SYSTEM_PROMPT },
 				{ role: "user", content: context },
 			],
-			temperature: 0.5,
-			max_tokens: 512,
+			temperature: 0.3,
+			max_tokens: 1024,
 		});
 
 		const choice = response.choices[0];
