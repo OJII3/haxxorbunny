@@ -76,7 +76,7 @@ ${longTermList}
 				{ role: "user", content: context },
 			],
 			temperature: 0.3,
-			max_tokens: 400,
+			max_tokens: 2048,
 		});
 
 		const raw = response.choices[0]?.message?.content?.trim();

@@ -67,7 +67,7 @@ ${memoryList}
 				{ role: "user", content: context },
 			],
 			temperature: 0.7,
-			max_tokens: 600,
+			max_tokens: 2048,
 		});
 
 		const raw = response.choices[0]?.message?.content?.trim();
