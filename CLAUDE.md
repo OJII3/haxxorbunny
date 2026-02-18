@@ -114,7 +114,9 @@ data/
 - Formatter: Biome (tab インデント)
 - import 順序: Biome の organizeImports に従う
 - コード変更後は必ず `nr typecheck && nr lint` で確認
-- 適宜コミットし、PRを作成すること
-- 作業完了時は自動的に push して PR を作成すること（`/create-pr` スキルを使用）
+- コード変更後はユーザーに言われる前に自発的に commit → push → PR 作成まで一連で行うこと
+  - commit: 変更をこまめにコミット
+  - push: コミット後は必ず push
+  - PR 作成: 作業ブランチなら `/create-pr` スキルで PR を作成
 - CLAUDE.md はプロジェクトのドキュメントとして常に最新に保つこと
 - ユーザーが「merge」と言った場合、該当 PR をマージし、最新の main ブランチに戻ること（`gh pr merge` → `git checkout main && git pull`）
