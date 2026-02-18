@@ -23,7 +23,7 @@ function cleanExpired(): void {
 	const now = Date.now();
 	let i = 0;
 	while (i < recentMessages.length) {
-		if (recentMessages[i].expiresAt < now) {
+		if ((recentMessages[i]?.expiresAt ?? 0) < now) {
 			recentMessages.splice(i, 1);
 		} else {
 			i++;

@@ -1,6 +1,5 @@
 import { config } from "../config.ts";
 import {
-	type MemoryEntry,
 	appendMemoryEntry,
 	loadMemory,
 	normalizeEntry,
@@ -99,9 +98,7 @@ ${memoryList}
 			}
 			if (validIndices.length > 0) {
 				saveMemory(memory);
-				console.log(
-					`[dream] Forgot ${validIndices.length} memories`,
-				);
+				console.log(`[dream] Forgot ${validIndices.length} memories`);
 			}
 		}
 

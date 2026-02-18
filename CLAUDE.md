@@ -46,12 +46,14 @@ src/
 │   ├── triage.ts         # トリアージ判定ロジック (ignore/engage 2択)
 │   ├── triage-throttle.ts # チャンネルごとのスロットリング
 │   ├── reflection.ts     # triage後の軽量reflection (人格・記憶更新)
-│   ├── memory.ts         # 記憶管理 (load/save/append/toPrompt)
-│   ├── heartbeat.ts      # 定期タスク管理
+│   ├── memory.ts         # 記憶管理 (load/save/append/toPrompt + 感情スコアリング)
+│   ├── heartbeat.ts      # 定期タスク管理 + アクティブ時間帯判定
 │   ├── distill.ts        # 記憶蒸留 (日次→長期)
+│   ├── dream.ts          # 夢処理 (記憶の連想分析・洞察生成)
+│   ├── message-dedup.ts  # メッセージ重複抑制 (SHA-256 + 24時間キャッシュ)
 │   └── prompts/
-│       ├── system.ts     # 不変システムプロンプト (ツールベース)
-│       └── personality.ts # 可変プロンプト (personality.json)
+│       ├── system.ts     # SOUL_PROMPT (不変の本質) + IDENTITY_PROMPT (行動指針)
+│       └── personality.ts # 可変プロンプト (4次元気分ベクトル + personality.json)
 ├── scheduler/
 │   ├── index.ts          # cron スケジューラー
 │   └── cron.ts           # heartbeatタスク統合 (自主発言・蒸留・整理)
@@ -106,9 +108,9 @@ data/
 
 | ツール名 | パラメータ | 説明 |
 |---------|-----------|------|
-| `save_memory` | `entry` | 長期記憶に保存（30字以内） |
+| `save_memory` | `entry`, `emotional_impact?` | 長期記憶に保存（30字以内、感情インパクト1-5） |
 | `save_user_note` | `username`, `note` | ユーザーメモ保存 |
-| `update_personality` | `mood?`, `recent_topics?`, `interests?` | 性格設定更新 |
+| `update_personality` | `mood?`, `recent_topics?`, `interests?` | 性格設定更新（mood は4次元ベクトル） |
 
 ### トリアージ LLM レスポンス形式
 
@@ -130,14 +132,15 @@ data/
   トリアージ結果:
   ├─ ignore:  reflection LLM(flash, fire-and-forget) → personality + memory 更新
   └─ engage:  エージェントループ起動
-       ├─ LLM に tools 定義 + SOUL + MEMORY + 会話履歴を送信
+       ├─ LLM に tools 定義 + SOUL + IDENTITY + personality + MEMORY + 会話履歴を送信 (4層構成)
        ├─ tool_calls → 各ツール実行 → 結果を LLM に返す → ループ
        └─ finish_reason=stop → 終了（最大5イテレーション）
 
-cron (10分) → heartbeat タスクチェック
-  ├─ autonomous_post (10分): エージェントループ → 自主発言 + personality + memory 更新
+cron (10分) → heartbeat タスクチェック → アクティブ時間帯判定
+  ├─ autonomous_post (10分): アクティブ時間内のみ → 重複チェック → エージェントループ
   ├─ distill_memory (6時間): 蒸留LLM(flash) → 日次記憶集約 + 長期記憶更新
-  └─ cleanup_old_memory (24時間): 古い日次ファイルの整理
+  ├─ cleanup_old_memory (24時間): 古い日次ファイルの整理
+  └─ dream_processing (12時間): 夢処理LLM(flash) → 記憶連想分析 + 洞察生成
 ```
 
 - メンションかどうかに関わらず、全メッセージがトリアージを通る統一フロー
@@ -145,6 +148,15 @@ cron (10分) → heartbeat タスクチェック
 - トリアージは控えめ方針。以下の場合のみ engage: メンション、会話の混乱整理、誤解防止、直接の質問
 - ignore 時は reflection LLM が人格・記憶を更新（fire-and-forget）
 - engage 時はエージェントループが起動し、LLM がツールで自由に行動
+
+### 人間らしさシステム
+
+- **アクティブ時間帯**: 8時〜翌2時（JST）のみ自主発言。深夜は活動休止
+- **重複発言抑制**: SHA-256 + 冒頭50文字ハッシュで24時間キャッシュ。cron トリガー時のみチェック
+- **4次元気分ベクトル**: energy/positivity/sociability/curiosity (各0-1)。時間帯で energy 自動変動、急変防止の補間（70% new + 30% old）
+- **感情付き記憶**: MemoryEntry に emotional_impact (1-5) + created_at。エビングハウス忘却曲線（30日半減期）でスコアリング
+- **夢処理**: 12時間ごとに記憶を連想分析。洞察を [dream] タグ付き記憶として追加、不要記憶を整理
+- **SOUL/IDENTITY 分離**: 不変の本質（SOUL_PROMPT）と可変の行動指針（IDENTITY_PROMPT）を分離。プロンプト4層構成
 
 ### DB テーブル
 

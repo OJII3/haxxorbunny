@@ -29,8 +29,7 @@ export function isWithinActiveHours(heartbeat: Heartbeat): boolean {
 
 	const { start, end } = heartbeat.active_hours;
 	const now = new Date();
-	const jstHour =
-		now.getUTCHours() + 9 + now.getUTCMinutes() / 60;
+	const jstHour = now.getUTCHours() + 9 + now.getUTCMinutes() / 60;
 	const normalizedHour = jstHour >= 24 ? jstHour - 24 : jstHour;
 
 	if (end <= 24) {

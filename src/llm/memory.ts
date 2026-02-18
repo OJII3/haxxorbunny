@@ -114,7 +114,10 @@ export function appendMemoryEntry(
 		if (memory.entries.length > MAX_ENTRIES) {
 			// スコアの低い記憶を削除
 			const scored = memory.entries
-				.map((e) => ({ entry: e, score: computeRecallScore(normalizeEntry(e)) }))
+				.map((e) => ({
+					entry: e,
+					score: computeRecallScore(normalizeEntry(e)),
+				}))
 				.sort((a, b) => b.score - a.score);
 			memory.entries = scored.slice(0, MAX_ENTRIES).map((s) => s.entry);
 		}

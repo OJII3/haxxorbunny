@@ -1,8 +1,8 @@
 import { config } from "../config.ts";
 import {
-	type MemoryEntry,
 	loadDailyMemory,
 	loadMemory,
+	type MemoryEntry,
 	normalizeEntry,
 	saveDailyMemory,
 	saveMemory,

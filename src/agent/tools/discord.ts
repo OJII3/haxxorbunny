@@ -30,7 +30,10 @@ const sendMessage: ToolHandler = async (args, ctx) => {
 
 	// cron トリガー時のみ重複チェック
 	if (ctx.triggeredBy === "cron" && isDuplicate(content)) {
-		console.log("[dedup] Blocked duplicate cron message:", content.slice(0, 50));
+		console.log(
+			"[dedup] Blocked duplicate cron message:",
+			content.slice(0, 50),
+		);
 		return fail(
 			"This message is too similar to a recent post. Try something different.",
 		);
