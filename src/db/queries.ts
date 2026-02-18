@@ -38,3 +38,15 @@ export function saveBotAction(data: {
 		.values({ ...data, createdAt: new Date() })
 		.run();
 }
+
+export function getLastBotAction(channelId: string) {
+	return (
+		db
+			.select()
+			.from(botActions)
+			.where(eq(botActions.channelId, channelId))
+			.orderBy(desc(botActions.createdAt))
+			.limit(1)
+			.all()[0] ?? null
+	);
+}

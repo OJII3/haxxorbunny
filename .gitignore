@@ -31,6 +31,9 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 # OS
 .DS_Store
 
+# direnv
+.direnv
+
 # data (DB is local-only)
 data/*.db
 data/*.db-journal

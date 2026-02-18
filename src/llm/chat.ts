@@ -10,7 +10,7 @@ import {
 import { SYSTEM_PROMPT } from "./prompts/system.ts";
 
 export interface LLMResponse {
-	action: "message" | "reaction" | "none";
+	action: "message" | "reply" | "reaction" | "none";
 	content?: string;
 	emoji?: string;
 	personality_update?: Partial<Personality> | null;
@@ -59,7 +59,9 @@ export async function chat(
 	}
 
 	try {
-		const cleaned = raw.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "");
+		const cleaned = raw
+			.replace(/^```(?:json)?\s*\n?/i, "")
+			.replace(/\n?```\s*$/i, "");
 		const parsed = JSON.parse(cleaned) as LLMResponse;
 
 		if (parsed.personality_update) {

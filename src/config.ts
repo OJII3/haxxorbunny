@@ -17,4 +17,13 @@ export const config = {
 		apiKey: process.env.LLM_API_KEY ?? "dummy",
 		model: process.env.LLM_MODEL ?? "gemini",
 	},
+	triage: {
+		baseUrl:
+			process.env.TRIAGE_API_BASE_URL ??
+			process.env.LLM_API_BASE_URL ??
+			"http://localhost:3000/v1",
+		apiKey: process.env.TRIAGE_API_KEY ?? process.env.LLM_API_KEY ?? "dummy",
+		model: process.env.TRIAGE_MODEL ?? "gemini-3-flash-preview",
+		throttleMs: Number(process.env.TRIAGE_THROTTLE_MS ?? "2000"),
+	},
 } as const;
