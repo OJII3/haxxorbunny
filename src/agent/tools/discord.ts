@@ -26,16 +26,28 @@ function botUserId(): string {
 const sendMessage: ToolHandler = async (args, ctx) => {
 	const content = args.content as string;
 	if (!content) return fail("content is required");
-	if (!ctx.channel.isSendable()) return fail("Channel is not sendable");
-	await ctx.channel.send(content);
+
+	const channelId = args.channel_id as string | undefined;
+	let targetChannel = ctx.channel;
+
+	if (channelId && channelId !== ctx.channel.id) {
+		const ch = ctx.guild.channels.cache.get(channelId);
+		if (!ch || !ch.isTextBased())
+			return fail("Channel not found or not text-based");
+		targetChannel = ch as GuildTextBasedChannel;
+	}
+
+	if (!targetChannel.isSendable()) return fail("Channel is not sendable");
+	await targetChannel.send(content);
 	saveMessage({
-		channelId: ctx.channel.id,
+		channelId: targetChannel.id,
 		userId: botUserId(),
 		username: "haxxorbunny",
 		content,
 		isBot: true,
 	});
-	return ok("Message sent");
+	const channelName = "name" in targetChannel ? targetChannel.name : "DM";
+	return ok(`Message sent to #${channelName}`);
 };
 
 const replyToMessage: ToolHandler = async (args, ctx) => {
@@ -237,11 +249,16 @@ export const discordTools: ToolDefinition[] = [
 			type: "function",
 			function: {
 				name: "send_message",
-				description: "チャンネルにメッセージを送信する",
+				description:
+					"チャンネルにメッセージを送信する。channel_id を指定すると別のチャンネルにも送信可能",
 				parameters: {
 					type: "object",
 					properties: {
 						content: { type: "string", description: "送信するメッセージ内容" },
+						channel_id: {
+							type: "string",
+							description: "送信先チャンネルの ID（省略時は現在のチャンネル）",
+						},
 					},
 					required: ["content"],
 				},
