@@ -227,28 +227,10 @@ export async function runAgentLoop(ctx: AgentContext): Promise<void> {
 			});
 		}
 
-		// メッセージ送信後は記憶・人格ツール以外は終了
-		if (
-			messageSent &&
-			!functionToolCalls.some(
-				(tc) =>
-					tc.function.name === "save_memory" ||
-					tc.function.name === "save_user_note" ||
-					tc.function.name === "update_personality",
-			)
-		) {
-			// 送信後にメモリ系ツールも呼ばれていない場合、もう1イテレーションだけ許可
-			// （LLM が送信後に記憶保存したいケースに対応）
-			if (
-				i > 0 ||
-				!functionToolCalls.some(
-					(tc) =>
-						tc.function.name === "send_message" ||
-						tc.function.name === "reply_to_message",
-				)
-			) {
-				shouldStop = true;
-			}
+		// メッセージ送信済みなら次のイテレーションで停止
+		// （今回のイテレーションで記憶保存も同時に行われるケースに対応）
+		if (messageSent) {
+			shouldStop = true;
 		}
 	}
 
