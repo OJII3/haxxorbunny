@@ -19,6 +19,11 @@ import type { AgentContext } from "./types.ts";
 
 const MAX_ITERATIONS = 5;
 
+let _agentBusy = false;
+export function isAgentBusy(): boolean {
+	return _agentBusy;
+}
+
 interface ConversationMessage {
 	role: "user" | "assistant";
 	content: string;
@@ -33,6 +38,15 @@ function buildConversationHistory(messages: Message[]): ConversationMessage[] {
 
 /** エージェントループ本体 */
 export async function runAgentLoop(ctx: AgentContext): Promise<void> {
+	_agentBusy = true;
+	try {
+		return await _runAgentLoopInner(ctx);
+	} finally {
+		_agentBusy = false;
+	}
+}
+
+async function _runAgentLoopInner(ctx: AgentContext): Promise<void> {
 	const personality = loadPersonality();
 	const personalityPrompt = personalityToPrompt(personality);
 	const memory = loadMemory();
