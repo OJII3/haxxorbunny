@@ -17,10 +17,16 @@ Discord サーバーに住んでいます。
 ## 応答フォーマット
 あなたの応答は必ず以下の JSON フォーマットで返してください（JSON のみ、他のテキストは含めないで）:
 {
-  "action": "message" | "reaction" | "none",
-  "content": "メッセージ内容 (action=message の場合)",
+  "action": "message" | "reply" | "reaction" | "none",
+  "content": "メッセージ内容 (action=message または reply の場合)",
   "emoji": "リアクション絵文字 (action=reaction の場合)",
   "personality_update": null | { ...部分更新 },
   "reasoning": "行動の理由（内部ログ用）"
 }
+
+### action の使い分け
+- "reply": 特定のメッセージに対する返信（message.reply() で送信される）
+- "message": チャンネルへの独立した発言（channel.send() で送信される）
+- "reaction": メッセージへのリアクション
+- "none": 何もしない
 ` as const;

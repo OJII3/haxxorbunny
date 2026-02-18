@@ -2,10 +2,10 @@ import type { Message } from "discord.js";
 import { client } from "../../client.ts";
 import { saveBotAction, saveMessage } from "../../db/queries.ts";
 import { chat } from "../../llm/chat.ts";
+import { triage } from "../../llm/triage.ts";
+import { shouldThrottle } from "../../llm/triage-throttle.ts";
 
-function shouldRespond(message: Message): boolean {
-	if (message.author.bot) return false;
-
+function isMentioned(message: Message): boolean {
 	const botUser = client.user;
 	if (!botUser) return false;
 
@@ -22,6 +22,60 @@ async function fetchRecentMessages(message: Message): Promise<Message[]> {
 	return [...fetched.values()].reverse();
 }
 
+async function handleMainLLM(
+	message: Message,
+	triggeredBy: string,
+): Promise<void> {
+	const recentMessages = await fetchRecentMessages(message);
+	const response = await chat(message, recentMessages);
+
+	console.log(
+		`[action] ${response.action} | trigger: ${triggeredBy} | reason: ${response.reasoning ?? "N/A"}`,
+	);
+
+	switch (response.action) {
+		case "reply":
+			if (response.content) {
+				await message.reply(response.content);
+				saveMessage({
+					channelId: message.channelId,
+					userId: client.user?.id ?? "bot",
+					username: "haxxorbunny",
+					content: response.content,
+					isBot: true,
+				});
+			}
+			break;
+		case "message":
+			if (response.content && message.channel.isSendable()) {
+				await message.channel.send(response.content);
+				saveMessage({
+					channelId: message.channelId,
+					userId: client.user?.id ?? "bot",
+					username: "haxxorbunny",
+					content: response.content,
+					isBot: true,
+				});
+			}
+			break;
+		case "reaction":
+			if (response.emoji) {
+				await message.react(response.emoji);
+			}
+			break;
+		case "none":
+			break;
+	}
+
+	saveBotAction({
+		action: response.action,
+		channelId: message.channelId,
+		content: response.content ?? null,
+		reasoning: response.reasoning ?? null,
+		triggeredBy,
+	});
+}
+
 export async function handleMessageCreate(message: Message): Promise<void> {
 	// すべてのメッセージを DB に保存
 	saveMessage({
@@ -32,63 +86,58 @@ export async function handleMessageCreate(message: Message): Promise<void> {
 		isBot: message.author.bot,
 	});
 
-	if (!shouldRespond(message)) {
-		// 5% の確率でランダムリアクション
-		if (!message.author.bot && Math.random() < 0.05) {
-			const emojis = ["👀", "🐰", "✨", "🤔", "💻", "🔥", "👍"];
-			const emoji = emojis[Math.floor(Math.random() * emojis.length)];
-			if (emoji) {
-				await message.react(emoji).catch(() => {});
-				saveBotAction({
-					action: "reaction",
-					channelId: message.channelId,
-					content: emoji,
-					reasoning: "Random reaction",
-					triggeredBy: "random",
-				});
-			}
+	// Bot のメッセージは無視
+	if (message.author.bot) return;
+
+	// メンション → バイパス → メイン LLM → reply
+	if (isMentioned(message)) {
+		try {
+			await handleMainLLM(message, "mention");
+		} catch (error) {
+			console.error("[messageCreate] Mention handler error:", error);
 		}
 		return;
 	}
 
-	try {
-		const recentMessages = await fetchRecentMessages(message);
-		const response = await chat(message, recentMessages);
+	// その他 → スロットル判定 → トリアージ → アクション実行
+	if (shouldThrottle(message.channelId)) {
+		return;
+	}
 
-		console.log(
-			`[action] ${response.action} | reason: ${response.reasoning ?? "N/A"}`,
+	try {
+		const triageResult = await triage(
+			message.channelId,
+			message.content,
+			message.author.displayName,
 		);
 
-		switch (response.action) {
-			case "message":
-				if (response.content && message.channel.isSendable()) {
-					await message.channel.send(response.content);
-					saveMessage({
+		console.log(
+			`[triage] ${triageResult.action} (${triageResult.confidence}) | reason: ${triageResult.reasoning}`,
+		);
+
+		switch (triageResult.action) {
+			case "ignore":
+				break;
+
+			case "reaction":
+				if (triageResult.emoji) {
+					await message.react(triageResult.emoji).catch(() => {});
+					saveBotAction({
+						action: "reaction",
 						channelId: message.channelId,
-						userId: client.user?.id ?? "bot",
-						username: "haxxorbunny",
-						content: response.content,
-						isBot: true,
+						content: triageResult.emoji,
+						reasoning: triageResult.reasoning,
+						triggeredBy: "triage",
 					});
 				}
 				break;
-			case "reaction":
-				if (response.emoji) {
-					await message.react(response.emoji);
-				}
-				break;
-			case "none":
+
+			case "reply":
+			case "message":
+				await handleMainLLM(message, "triage");
 				break;
 		}
-
-		saveBotAction({
-			action: response.action,
-			channelId: message.channelId,
-			content: response.content ?? null,
-			reasoning: response.reasoning ?? null,
-			triggeredBy: "mention",
-		});
 	} catch (error) {
-		console.error("[messageCreate] Error:", error);
+		console.error("[messageCreate] Triage handler error:", error);
 	}
 }
