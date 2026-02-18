@@ -1,12 +1,7 @@
 import type { Message } from "discord.js";
 import { config } from "../config.ts";
 import { llm } from "./client.ts";
-import {
-	addUserNote,
-	appendMemoryEntry,
-	loadMemory,
-	memoryToPrompt,
-} from "./memory.ts";
+import { loadMemory, memoryToPrompt, processMemoryFields } from "./memory.ts";
 import {
 	loadPersonality,
 	type Personality,
@@ -35,22 +30,6 @@ function buildConversationHistory(messages: Message[]): ConversationMessage[] {
 		role: (msg.author.bot ? "assistant" : "user") as "user" | "assistant",
 		content: `[${msg.author.displayName}]: ${msg.content}`,
 	}));
-}
-
-function processMemoryFields(parsed: LLMResponse): void {
-	if (parsed.memory_entry) {
-		appendMemoryEntry(parsed.memory_entry);
-	}
-	if (parsed.user_note) {
-		const colonIndex = parsed.user_note.indexOf(":");
-		if (colonIndex > 0) {
-			const username = parsed.user_note.slice(0, colonIndex).trim();
-			const note = parsed.user_note.slice(colonIndex + 1).trim();
-			if (username && note) {
-				addUserNote(username, note);
-			}
-		}
-	}
 }
 
 export async function chat(

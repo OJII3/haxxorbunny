@@ -20,6 +20,18 @@ const MAX_ENTRIES = 100;
 const MAX_USER_NOTES = 10;
 const PROMPT_RECENT_ENTRIES = 20;
 
+// 簡易 mutex: ファイルの Read-Modify-Write を直列化する
+let memoryLock = Promise.resolve();
+
+function withMemoryLock<T>(fn: () => T): Promise<T> {
+	const next = memoryLock.then(fn, fn);
+	memoryLock = next.then(
+		() => {},
+		() => {},
+	);
+	return next;
+}
+
 function ensureDailyDir(): void {
 	if (!existsSync(DAILY_DIR)) {
 		mkdirSync(DAILY_DIR, { recursive: true });
@@ -46,30 +58,34 @@ export function saveMemory(memory: Memory): void {
 	writeFileSync(MEMORY_PATH, JSON.stringify(memory, null, "\t"), "utf-8");
 }
 
-export function appendMemoryEntry(entry: string): void {
-	const memory = loadMemory();
-	memory.entries.push(entry);
-	if (memory.entries.length > MAX_ENTRIES) {
-		memory.entries = memory.entries.slice(-MAX_ENTRIES);
-	}
-	saveMemory(memory);
-	appendDailyEntry(entry);
-	console.log("[memory] Added:", entry);
+export function appendMemoryEntry(entry: string): Promise<void> {
+	return withMemoryLock(() => {
+		const memory = loadMemory();
+		memory.entries.push(entry);
+		if (memory.entries.length > MAX_ENTRIES) {
+			memory.entries = memory.entries.slice(-MAX_ENTRIES);
+		}
+		saveMemory(memory);
+		appendDailyEntry(entry);
+		console.log("[memory] Added:", entry);
+	});
 }
 
-export function addUserNote(username: string, note: string): void {
-	const memory = loadMemory();
-	if (!memory.user_notes[username]) {
-		memory.user_notes[username] = [];
-	}
-	memory.user_notes[username].push(note);
-	if (memory.user_notes[username].length > MAX_USER_NOTES) {
-		memory.user_notes[username] = memory.user_notes[username].slice(
-			-MAX_USER_NOTES,
-		);
-	}
-	saveMemory(memory);
-	console.log(`[memory] User note for ${username}:`, note);
+export function addUserNote(username: string, note: string): Promise<void> {
+	return withMemoryLock(() => {
+		const memory = loadMemory();
+		if (!memory.user_notes[username]) {
+			memory.user_notes[username] = [];
+		}
+		memory.user_notes[username].push(note);
+		if (memory.user_notes[username].length > MAX_USER_NOTES) {
+			memory.user_notes[username] = memory.user_notes[username].slice(
+				-MAX_USER_NOTES,
+			);
+		}
+		saveMemory(memory);
+		console.log(`[memory] User note for ${username}:`, note);
+	});
 }
 
 export function memoryToPrompt(memory: Memory): string {
@@ -128,4 +144,23 @@ export function saveDailyMemory(dateKey: string, daily: DailyMemory): void {
 	ensureDailyDir();
 	const filePath = join(DAILY_DIR, `${dateKey}.json`);
 	writeFileSync(filePath, JSON.stringify(daily, null, "\t"), "utf-8");
+}
+
+export function processMemoryFields(fields: {
+	memory_entry?: string | null;
+	user_note?: string | null;
+}): void {
+	if (fields.memory_entry) {
+		appendMemoryEntry(fields.memory_entry);
+	}
+	if (fields.user_note) {
+		const colonIndex = fields.user_note.indexOf(":");
+		if (colonIndex > 0) {
+			const username = fields.user_note.slice(0, colonIndex).trim();
+			const note = fields.user_note.slice(colonIndex + 1).trim();
+			if (username && note) {
+				addUserNote(username, note);
+			}
+		}
+	}
 }

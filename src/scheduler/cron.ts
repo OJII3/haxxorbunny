@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { ChannelType, type Guild, type TextChannel } from "discord.js";
 import { client } from "../client.ts";
@@ -17,10 +17,9 @@ import {
 	shouldRunTask,
 } from "../llm/heartbeat.ts";
 import {
-	addUserNote,
-	appendMemoryEntry,
 	loadMemory,
 	memoryToPrompt,
+	processMemoryFields,
 } from "../llm/memory.ts";
 import {
 	loadPersonality,
@@ -40,22 +39,6 @@ function selectChannel(guild: Guild): TextChannel | undefined {
 	return guild.channels.cache.find((ch) => ch.type === ChannelType.GuildText) as
 		| TextChannel
 		| undefined;
-}
-
-function processMemoryFields(parsed: LLMResponse): void {
-	if (parsed.memory_entry) {
-		appendMemoryEntry(parsed.memory_entry);
-	}
-	if (parsed.user_note) {
-		const colonIndex = parsed.user_note.indexOf(":");
-		if (colonIndex > 0) {
-			const username = parsed.user_note.slice(0, colonIndex).trim();
-			const note = parsed.user_note.slice(colonIndex + 1).trim();
-			if (username && note) {
-				addUserNote(username, note);
-			}
-		}
-	}
 }
 
 async function postToGuild(guild: Guild): Promise<void> {
@@ -156,7 +139,7 @@ function cleanupOldMemory(): void {
 	const toRemove = files.slice(0, files.length - MAX_DAILY_FILES);
 	for (const file of toRemove) {
 		const filePath = join(DAILY_DIR, file);
-		Bun.file(filePath).delete();
+		unlinkSync(filePath);
 		console.log(`[cleanup] Removed old daily memory: ${file}`);
 	}
 	console.log(`[cleanup] Removed ${toRemove.length} old daily files`);
@@ -197,4 +180,4 @@ async function runHeartbeatTasks(): Promise<void> {
 	}
 }
 
-export { runHeartbeatTasks as autonomousPost };
+export { runHeartbeatTasks };

@@ -1,10 +1,12 @@
 import { config } from "../config.ts";
 import { appendMemoryEntry } from "./memory.ts";
-import { updatePersonality } from "./prompts/personality.ts";
+import { type Personality, updatePersonality } from "./prompts/personality.ts";
 import { triageLlm } from "./triage-client.ts";
 
 interface ReflectionResult {
-	personality_update?: Record<string, unknown> | null;
+	personality_update?: Partial<
+		Pick<Personality, "mood" | "recent_topics" | "interests">
+	> | null;
 	memory_entry?: string | null;
 	reasoning: string;
 }
@@ -25,6 +27,7 @@ const REFLECTION_SYSTEM_PROMPT = `
 }
 
 注意:
+- personality_update で変更できるのは mood, recent_topics, interests のみ
 - personality_update は変更したいフィールドのみ含めてください
 - 大きな変更は不要。微調整のみ
 - 記憶は本当に重要なことだけ（ユーザーの好み、重要な出来事など）
@@ -60,10 +63,16 @@ ${conversationContext || "(なし)"}
 		});
 
 		const raw = response.choices[0]?.message?.content?.trim();
-		if (!raw) return;
+		if (!raw) {
+			console.warn("[reflection] Empty response");
+			return;
+		}
 
 		const jsonMatch = raw.match(/\{[\s\S]*\}/);
-		if (!jsonMatch) return;
+		if (!jsonMatch) {
+			console.warn("[reflection] No JSON found in response:", raw);
+			return;
+		}
 
 		const result = JSON.parse(jsonMatch[0]) as ReflectionResult;
 
