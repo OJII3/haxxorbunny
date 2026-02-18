@@ -7,6 +7,7 @@ import { client } from "../client.ts";
 import { getActiveChannelIds } from "../db/queries.ts";
 import { distillDailyMemory } from "../llm/distill.ts";
 import {
+	isWithinActiveHours,
 	loadHeartbeat,
 	markTaskExecuted,
 	shouldRunTask,
@@ -81,6 +82,12 @@ async function runHeartbeatTasks(): Promise<void> {
 		try {
 			switch (task.id) {
 				case "autonomous_post": {
+					if (!isWithinActiveHours(heartbeat)) {
+						console.log(
+							"[heartbeat] autonomous_post skipped: outside active hours",
+						);
+						break;
+					}
 					const guilds = client.guilds.cache;
 					for (const guild of guilds.values()) {
 						await postToGuild(guild);
