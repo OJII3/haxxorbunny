@@ -15,7 +15,7 @@ services:
     image: justlikemaki/aiclient-2-api
     container_name: haxxorbunny-aiclient
     ports:
-      - "3000:3000"
+      - "3001:3000"
     volumes:
       - aiclient-configs:/app/configs
     restart: unless-stopped
