@@ -1,6 +1,11 @@
 import type { Message } from "discord.js";
+import { client } from "../client.ts";
 import { config } from "../config.ts";
-import { getRecentMessages, saveBotAction } from "../db/queries.ts";
+import {
+	getRecentMessages,
+	saveBotAction,
+	saveMessage,
+} from "../db/queries.ts";
 import { llm } from "../llm/client.ts";
 import { loadMemory, memoryToPrompt } from "../llm/memory.ts";
 import {
@@ -84,9 +89,12 @@ export async function runAgentLoop(ctx: AgentContext): Promise<void> {
 	}
 
 	const executedTools: string[] = [];
+	let messageSent = false;
+	let shouldStop = false;
 
 	// エージェントループ
 	for (let i = 0; i < MAX_ITERATIONS; i++) {
+		if (shouldStop) break;
 		const response = await llm.chat.completions.create({
 			model: config.llm.model,
 			messages: messages as Parameters<
@@ -103,6 +111,10 @@ export async function runAgentLoop(ctx: AgentContext): Promise<void> {
 		}
 
 		const assistantMessage = choice.message;
+
+		console.log(
+			`[agent] LLM response | finish_reason: ${choice.finish_reason} | content: ${assistantMessage.content?.slice(0, 100) ?? "(null)"} | tool_calls: ${JSON.stringify(assistantMessage.tool_calls ?? [])}`,
+		);
 
 		// function tool_calls のみフィルタリング（custom tool は無視）
 		const functionToolCalls =
@@ -134,6 +146,44 @@ export async function runAgentLoop(ctx: AgentContext): Promise<void> {
 
 		// ツール呼び出しがなければ終了
 		if (functionToolCalls.length === 0) {
+			// フォールバック: LLM がテキストだけ返した場合、自動で送信する
+			const textContent = assistantMessage.content?.trim();
+			if (textContent && !messageSent) {
+				console.log(
+					"[agent] Fallback: LLM returned text without tool calls, sending as message",
+				);
+				if (ctx.triggerMessage) {
+					try {
+						await ctx.triggerMessage.reply(textContent);
+						saveMessage({
+							channelId: ctx.channel.id,
+							userId: client.user?.id ?? "bot",
+							username: "haxxorbunny",
+							content: textContent,
+							isBot: true,
+						});
+						executedTools.push("reply_to_message(fallback)");
+						messageSent = true;
+					} catch (e) {
+						console.error("[agent] Fallback reply failed:", e);
+					}
+				} else if (ctx.channel.isSendable()) {
+					try {
+						await ctx.channel.send(textContent);
+						saveMessage({
+							channelId: ctx.channel.id,
+							userId: client.user?.id ?? "bot",
+							username: "haxxorbunny",
+							content: textContent,
+							isBot: true,
+						});
+						executedTools.push("send_message(fallback)");
+						messageSent = true;
+					} catch (e) {
+						console.error("[agent] Fallback send failed:", e);
+					}
+				}
+			}
 			console.log(
 				`[agent] Finished after ${i + 1} iteration(s) (no tool calls)`,
 			);
@@ -145,8 +195,17 @@ export async function runAgentLoop(ctx: AgentContext): Promise<void> {
 			const toolName = toolCall.function.name;
 			const handler = getToolHandler(toolName);
 
+			const isSendAction =
+				toolName === "send_message" || toolName === "reply_to_message";
+
 			let resultText: string;
-			if (!handler) {
+
+			// メッセージ送信は1ループにつき1回のみ
+			if (isSendAction && messageSent) {
+				resultText =
+					"Error: Already sent a message in this turn. Use do_nothing to finish.";
+				console.warn(`[agent] Blocked duplicate ${toolName}`);
+			} else if (!handler) {
 				resultText = `Error: Unknown tool "${toolName}"`;
 				console.error(`[agent] Unknown tool: ${toolName}`);
 			} else {
@@ -161,10 +220,18 @@ export async function runAgentLoop(ctx: AgentContext): Promise<void> {
 					if (!result.success) {
 						console.warn(`[agent] Tool ${toolName} failed: ${resultText}`);
 					}
+					if (isSendAction && result.success) {
+						messageSent = true;
+					}
 				} catch (error) {
 					resultText = `Error executing ${toolName}: ${error instanceof Error ? error.message : String(error)}`;
 					console.error(`[agent] Tool execution error:`, error);
 				}
+			}
+
+			// do_nothing が呼ばれたらループ終了
+			if (toolName === "do_nothing") {
+				shouldStop = true;
 			}
 
 			executedTools.push(toolName);
@@ -175,6 +242,30 @@ export async function runAgentLoop(ctx: AgentContext): Promise<void> {
 				tool_call_id: toolCall.id,
 				content: resultText,
 			});
+		}
+
+		// メッセージ送信後は記憶・人格ツール以外は終了
+		if (
+			messageSent &&
+			!functionToolCalls.some(
+				(tc) =>
+					tc.function.name === "save_memory" ||
+					tc.function.name === "save_user_note" ||
+					tc.function.name === "update_personality",
+			)
+		) {
+			// 送信後にメモリ系ツールも呼ばれていない場合、もう1イテレーションだけ許可
+			// （LLM が送信後に記憶保存したいケースに対応）
+			if (
+				i > 0 ||
+				!functionToolCalls.some(
+					(tc) =>
+						tc.function.name === "send_message" ||
+						tc.function.name === "reply_to_message",
+				)
+			) {
+				shouldStop = true;
+			}
 		}
 	}
 
