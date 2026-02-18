@@ -14,15 +14,19 @@ const TRIAGE_SYSTEM_PROMPT = `
 与えられたメッセージと会話コンテキストから、bot が取るべきアクションを高速に判定してください。
 
 ## 判定基準
-- ignore: 挨拶だけ、独り言、bot に関係ない話題、連続する雑談
+- ignore: 完全に bot に無関係で、他人が割り込んでも不自然な場合のみ
 - reaction: 面白い・共感できる内容だがわざわざ返信するほどでもない場合（絵文字で反応）
 - reply: bot に話しかけている、質問されている、話題に関連して返信すべき場合
 - message: 会話の流れに自然に参加したい場合（返信ではなく独立発言）
 
+## 基本方針
+- 積極的に参加する。他人が反応しても良さそうな会話であれば reply や message を選ぶ
+- 時間帯は考慮しない（深夜でも関係なく参加する）
+- 迷ったら ignore より reply/message を選ぶ
+
 ## コンテキスト考慮
 - 直近の会話の流れ
-- bot の最後のアクションからの経過時間（頻繁すぎる介入を避ける）
-- 時間帯（深夜帯は控えめに）
+- bot の最後のアクションからの経過時間（同じ話題に連投しすぎない程度に）
 - メッセージの内容と盛り上がり
 
 ## 応答フォーマット
@@ -44,8 +48,6 @@ function buildTriageContext(
 	const lastAction = getLastBotAction(channelId);
 
 	const now = new Date();
-	const hour = now.getHours();
-	const dayOfWeek = ["日", "月", "火", "水", "木", "金", "土"][now.getDay()];
 
 	const conversationLog = recentMessages
 		.map((m) => `[${m.username}]: ${m.content}`)
@@ -56,9 +58,6 @@ function buildTriageContext(
 		: "なし";
 
 	return `
-## 現在時刻
-${dayOfWeek}曜日 ${hour}時
-
 ## 直近の会話 (最新10件)
 ${conversationLog || "(なし)"}
 
