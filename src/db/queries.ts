@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { count, desc, eq, gt, sql } from "drizzle-orm";
 import { db } from "./index.ts";
 import { botActions, messages } from "./schema.ts";
 
@@ -49,4 +49,17 @@ export function getLastBotAction(channelId: string) {
 			.limit(1)
 			.all()[0] ?? null
 	);
+}
+
+export function getActiveChannelIds(limit = 5): string[] {
+	const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+	const rows = db
+		.select({ channelId: messages.channelId, cnt: count() })
+		.from(messages)
+		.where(gt(messages.createdAt, since))
+		.groupBy(messages.channelId)
+		.orderBy(sql`count(*) desc`)
+		.limit(limit)
+		.all();
+	return rows.map((r) => r.channelId);
 }
