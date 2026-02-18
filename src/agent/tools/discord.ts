@@ -5,6 +5,7 @@ import {
 } from "discord.js";
 import { client } from "../../client.ts";
 import { saveMessage } from "../../db/queries.ts";
+import { isDuplicate, recordMessage } from "../../llm/message-dedup.ts";
 import type { ToolDefinition, ToolHandler, ToolResult } from "../types.ts";
 
 // ── helpers ──
@@ -27,6 +28,14 @@ const sendMessage: ToolHandler = async (args, ctx) => {
 	const content = args.content as string;
 	if (!content) return fail("content is required");
 
+	// cron トリガー時のみ重複チェック
+	if (ctx.triggeredBy === "cron" && isDuplicate(content)) {
+		console.log("[dedup] Blocked duplicate cron message:", content.slice(0, 50));
+		return fail(
+			"This message is too similar to a recent post. Try something different.",
+		);
+	}
+
 	const channelId = args.channel_id as string | undefined;
 	let targetChannel = ctx.channel;
 
@@ -39,6 +48,7 @@ const sendMessage: ToolHandler = async (args, ctx) => {
 
 	if (!targetChannel.isSendable()) return fail("Channel is not sendable");
 	await targetChannel.send(content);
+	recordMessage(content);
 	saveMessage({
 		channelId: targetChannel.id,
 		userId: botUserId(),

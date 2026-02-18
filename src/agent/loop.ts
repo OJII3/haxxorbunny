@@ -8,6 +8,7 @@ import {
 } from "../db/queries.ts";
 import { llm } from "../llm/client.ts";
 import { loadMemory, memoryToPrompt } from "../llm/memory.ts";
+import { isDuplicate, recordMessage } from "../llm/message-dedup.ts";
 import {
 	loadPersonality,
 	personalityToPrompt,
@@ -148,23 +149,32 @@ export async function runAgentLoop(ctx: AgentContext): Promise<void> {
 		if (functionToolCalls.length === 0) {
 			const textContent = assistantMessage.content?.trim();
 			if (textContent && !messageSent && ctx.channel.isSendable()) {
-				console.log(
-					"[agent] Fallback: sending text as send_message (not reply):",
-					textContent.slice(0, 100),
-				);
-				try {
-					await ctx.channel.send(textContent);
-					saveMessage({
-						channelId: ctx.channel.id,
-						userId: client.user?.id ?? "bot",
-						username: "haxxorbunny",
-						content: textContent,
-						isBot: true,
-					});
-					executedTools.push("send_message(fallback)");
-					messageSent = true;
-				} catch (e) {
-					console.error("[agent] Fallback send failed:", e);
+				// cron トリガー時は重複チェック
+				if (ctx.triggeredBy === "cron" && isDuplicate(textContent)) {
+					console.log(
+						"[agent] Fallback blocked by dedup:",
+						textContent.slice(0, 50),
+					);
+				} else {
+					console.log(
+						"[agent] Fallback: sending text as send_message (not reply):",
+						textContent.slice(0, 100),
+					);
+					try {
+						await ctx.channel.send(textContent);
+						recordMessage(textContent);
+						saveMessage({
+							channelId: ctx.channel.id,
+							userId: client.user?.id ?? "bot",
+							username: "haxxorbunny",
+							content: textContent,
+							isBot: true,
+						});
+						executedTools.push("send_message(fallback)");
+						messageSent = true;
+					} catch (e) {
+						console.error("[agent] Fallback send failed:", e);
+					}
 				}
 			}
 			console.log(
