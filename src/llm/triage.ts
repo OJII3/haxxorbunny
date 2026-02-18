@@ -101,8 +101,12 @@ export async function triage(
 			max_tokens: 300,
 		});
 
-		const raw = response.choices[0]?.message?.content?.trim();
+		const choice = response.choices[0];
+		const raw = choice?.message?.content?.trim();
+		const finishReason = choice?.finish_reason;
+
 		if (!raw) {
+			console.warn("[triage] Empty response, finish_reason:", finishReason);
 			return {
 				action: "ignore",
 				reasoning: "Empty triage response",
@@ -113,6 +117,21 @@ export async function triage(
 		// マークダウンコードブロックや余分なテキストを除去して JSON 部分を抽出
 		const jsonMatch = raw.match(/\{[\s\S]*\}/);
 		if (!jsonMatch) {
+			// 切り詰められた JSON から action だけでも抽出を試みる
+			const actionMatch = raw.match(
+				/"action"\s*:\s*"(ignore|reaction|reply|message)"/,
+			);
+			if (actionMatch) {
+				const action = actionMatch[1] as TriageResult["action"];
+				const emojiMatch = raw.match(/"emoji"\s*:\s*"([^"]+)"/);
+				console.warn("[triage] Truncated response, extracted action:", action);
+				return {
+					action,
+					emoji: emojiMatch?.[1],
+					reasoning: "Truncated triage response",
+					confidence: 0.5,
+				};
+			}
 			console.warn("[triage] No JSON found in response:", raw);
 			return {
 				action: "ignore",
