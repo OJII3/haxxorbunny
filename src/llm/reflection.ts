@@ -110,7 +110,8 @@ ${conversationContext || "(なし)"}
 		}
 
 		if (result.memory_entry) {
-			appendMemoryEntry(result.memory_entry);
+			// reflection 由来の記憶はやや低め (impact=2)
+			appendMemoryEntry(result.memory_entry, 2);
 			console.log("[reflection/memory] Added:", result.memory_entry);
 		}
 

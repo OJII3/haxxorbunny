@@ -18,8 +18,9 @@ const saveMemoryHandler: ToolHandler = async (args) => {
 	const entry = args.entry as string;
 	if (!entry) return fail("entry is required");
 	if (entry.length > 30) return fail("entry must be 30 characters or less");
-	await appendMemoryEntry(entry);
-	return ok(`Memory saved: ${entry}`);
+	const emotionalImpact = (args.emotional_impact as number | undefined) ?? 2;
+	await appendMemoryEntry(entry, emotionalImpact);
+	return ok(`Memory saved (impact=${emotionalImpact}): ${entry}`);
 };
 
 const saveUserNoteHandler: ToolHandler = async (args) => {
@@ -76,6 +77,11 @@ export const memoryTools: ToolDefinition[] = [
 						entry: {
 							type: "string",
 							description: "覚えておきたいこと（30字以内）",
+						},
+						emotional_impact: {
+							type: "number",
+							description:
+								"感情的インパクト (1=些細, 2=普通, 3=やや印象的, 4=印象的, 5=非常に印象的)。省略時は2",
 						},
 					},
 					required: ["entry"],
