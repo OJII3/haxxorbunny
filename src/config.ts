@@ -26,4 +26,8 @@ export const config = {
 		model: process.env.TRIAGE_MODEL ?? "gemini-3-flash-preview",
 		throttleMs: Number(process.env.TRIAGE_THROTTLE_MS ?? "2000"),
 	},
+	messageBuffer: {
+		ms: Number(process.env.MESSAGE_BUFFER_MS ?? "3000"),
+		maxMs: Number(process.env.MESSAGE_BUFFER_MAX_MS ?? "15000"),
+	},
 } as const;

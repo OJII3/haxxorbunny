@@ -50,6 +50,7 @@ src/
 │   ├── heartbeat.ts      # 定期タスク管理 + アクティブ時間帯判定
 │   ├── distill.ts        # 記憶蒸留 (日次→長期)
 │   ├── dream.ts          # 夢処理 (記憶の連想分析・洞察生成)
+│   ├── message-buffer.ts # 追いメッセージのデバウンスバッファ (channelId:userId 単位)
 │   ├── message-dedup.ts  # メッセージ重複抑制 (SHA-256 + 24時間キャッシュ)
 │   └── prompts/
 │       ├── system.ts     # SURFACE_PROMPT (軽量要約) + SOUL_PROMPT (不変の本質) + IDENTITY_PROMPT (行動指針)
@@ -128,8 +129,10 @@ data/
 ### イベントフロー（エージェントループ）
 
 ```
-メッセージ受信 → DB保存 → Bot除外 → スロットル判定(*) → トリアージLLM(高速) → 判定
-                                    (* メンション時はスロットルをバイパス)
+メッセージ受信 → DB保存 → Bot除外 → markActivity → デバウンスバッファ(3秒)
+                                                    ↓ (追加メッセージなし or 15秒超過)
+                                       結合コンテンツ生成 → スロットル判定(*) → トリアージLLM(高速) → 判定
+                                                           (* メンション時はスロットルをバイパス)
   トリアージ結果:
   ├─ ignore:  reflection LLM(flash, fire-and-forget) → personality + memory 更新
   └─ engage:  エージェントループ起動 (自動 typing インジケーター開始)
@@ -145,6 +148,7 @@ cron (10分) → heartbeat タスクチェック → アクティブ時間帯判
   └─ dream_processing (12時間): 夢処理LLM(flash) → 記憶連想分析 + 洞察生成
 ```
 
+- 同一ユーザーの連続メッセージ（追いメッセージ）はデバウンスバッファで蓄積し、最後のメッセージから3秒後にまとめて処理
 - メンションかどうかに関わらず、全メッセージがトリアージを通る統一フロー
 - メンション情報はトリアージのコンテキストとして渡され、判断材料として使われる
 - トリアージは控えめ方針。以下の場合のみ engage: メンション、会話の混乱整理、誤解防止、直接の質問
@@ -159,6 +163,7 @@ cron (10分) → heartbeat タスクチェック → アクティブ時間帯判
 - **感情付き記憶**: MemoryEntry に emotional_impact (1-5) + created_at。エビングハウス忘却曲線（30日半減期）でスコアリング
 - **夢処理**: 12時間ごとに記憶を連想分析。洞察を [dream] タグ付き記憶として追加、不要記憶を整理
 - **プロンプト階層化**: 軽量な SURFACE_PROMPT を毎回送信、詳細な SOUL_PROMPT + IDENTITY_PROMPT は recall_identity ツールでオンデマンド参照。トークン消費を ~1250t 削減
+- **メッセージデバウンス**: 同一 channelId:userId の連続メッセージを3秒（`MESSAGE_BUFFER_MS`）蓄積。最大15秒（`MESSAGE_BUFFER_MAX_MS`）で強制フラッシュ。結合コンテンツとしてトリアージに渡す
 - **自動 typing インジケーター**: エージェントループ中は5秒間隔で sendTyping() を呼び、Discord 上に「入力中…」を表示
 
 ### DB テーブル
