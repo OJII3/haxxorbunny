@@ -1,32 +1,16 @@
 import { existsSync, readdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { ChannelType, type Guild, type TextChannel } from "discord.js";
+import { runAgentLoop } from "../agent/loop.ts";
+import type { AgentContext } from "../agent/types.ts";
 import { client } from "../client.ts";
-import { config } from "../config.ts";
-import {
-	getActiveChannelIds,
-	saveBotAction,
-	saveMessage,
-} from "../db/queries.ts";
-import type { LLMResponse } from "../llm/chat.ts";
-import { llm } from "../llm/client.ts";
+import { getActiveChannelIds } from "../db/queries.ts";
 import { distillDailyMemory } from "../llm/distill.ts";
 import {
 	loadHeartbeat,
 	markTaskExecuted,
 	shouldRunTask,
 } from "../llm/heartbeat.ts";
-import {
-	loadMemory,
-	memoryToPrompt,
-	processMemoryFields,
-} from "../llm/memory.ts";
-import {
-	loadPersonality,
-	personalityToPrompt,
-	updatePersonality,
-} from "../llm/prompts/personality.ts";
-import { SYSTEM_PROMPT } from "../llm/prompts/system.ts";
 
 function selectChannel(guild: Guild): TextChannel | undefined {
 	const activeIds = getActiveChannelIds();
@@ -50,73 +34,14 @@ async function postToGuild(guild: Guild): Promise<void> {
 		return;
 	}
 
-	const personality = loadPersonality();
-	const personalityPrompt = personalityToPrompt(personality);
-	const memory = loadMemory();
-	const memoryPrompt = memoryToPrompt(memory);
-	const now = new Date();
+	const agentCtx: AgentContext = {
+		channel,
+		guild,
+		triggeredBy: "cron",
+	};
 
-	const response = await llm.chat.completions.create({
-		model: config.llm.model,
-		messages: [
-			{
-				role: "system",
-				content: `${SYSTEM_PROMPT}\n\n${personalityPrompt}\n${memoryPrompt}`,
-			},
-			{
-				role: "user",
-				content: `現在時刻: ${now.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}
-何か独り言を言いたいことはありますか？ times チャンネルに投稿するような軽い独り言を考えてください。
-特に言いたいことがなければ action: "none" を返してください。`,
-			},
-		],
-		temperature: 0.9,
-	});
-
-	const raw = response.choices[0]?.message?.content;
-	if (!raw) return;
-
-	try {
-		const cleaned = raw
-			.replace(/^```(?:json)?\s*\n?/i, "")
-			.replace(/\n?```\s*$/i, "");
-		const parsed = JSON.parse(cleaned) as LLMResponse;
-
-		if (parsed.action === "message" && parsed.content) {
-			await channel.send(parsed.content);
-			saveMessage({
-				channelId: channel.id,
-				userId: client.user?.id ?? "bot",
-				username: "haxxorbunny",
-				content: parsed.content,
-				isBot: true,
-			});
-		}
-
-		if (parsed.personality_update) {
-			updatePersonality(parsed.personality_update);
-			console.log("[cron/personality] Updated:", parsed.personality_update);
-		}
-
-		processMemoryFields(parsed);
-
-		saveBotAction({
-			action: parsed.action,
-			channelId: channel.id,
-			content: parsed.content ?? null,
-			reasoning: parsed.reasoning ?? null,
-			triggeredBy: "cron",
-		});
-
-		console.log(
-			`[cron] ${guild.name}/#${channel.name} | ${parsed.action} | reason: ${parsed.reasoning ?? "N/A"}`,
-		);
-	} catch {
-		console.error(
-			`[cron] ${guild.name}/#${channel.name} | Failed to parse LLM response:`,
-			raw,
-		);
-	}
+	await runAgentLoop(agentCtx);
+	console.log(`[cron] ${guild.name}/#${channel.name} | agent loop completed`);
 }
 
 const DAILY_DIR = join(import.meta.dir, "../../data/memory");

@@ -1,6 +1,6 @@
 # haxxorbunny
 
-Discord に住む自律的エージェント bot。LLM (aiclient-2-api 経由 Gemini) を使って自律的に行動する。
+Discord に住む自律的エージェント bot。LLM (aiclient-2-api 経由 Gemini) を使い、Tool-Use（関数呼び出し）方式で自律的に行動する。
 
 ## 技術スタック
 
@@ -28,23 +28,29 @@ Discord に住む自律的エージェント bot。LLM (aiclient-2-api 経由 Ge
 ```
 src/
 ├── index.ts              # エントリポイント
-├── client.ts             # Discord Client
+├── client.ts             # Discord Client (GuildMembers intent 含む)
 ├── config.ts             # 環境変数
+├── agent/
+│   ├── types.ts          # AgentContext, ToolResult, ToolHandler 等の型定義
+│   ├── loop.ts           # エージェントループ本体
+│   └── tools/
+│       ├── index.ts      # ツールレジストリ（定義集約 + 名前→ハンドラ Map）
+│       ├── discord.ts    # Discord 操作ツール群
+│       └── memory.ts     # 記憶・人格更新ツール群
 ├── discord/
 │   ├── events/           # messageCreate, ready, messageReactionAdd
 │   └── register.ts       # イベント登録
 ├── llm/
 │   ├── client.ts         # メイン LLM OpenAI SDK ラッパー
 │   ├── triage-client.ts  # トリアージ LLM 専用クライアント
-│   ├── chat.ts           # メイン LLM チャット呼び出し (MEMORY注入)
-│   ├── triage.ts         # トリアージ判定ロジック + プロンプト
+│   ├── triage.ts         # トリアージ判定ロジック (ignore/engage 2択)
 │   ├── triage-throttle.ts # チャンネルごとのスロットリング
 │   ├── reflection.ts     # triage後の軽量reflection (人格・記憶更新)
 │   ├── memory.ts         # 記憶管理 (load/save/append/toPrompt)
 │   ├── heartbeat.ts      # 定期タスク管理
 │   ├── distill.ts        # 記憶蒸留 (日次→長期)
 │   └── prompts/
-│       ├── system.ts     # 不変システムプロンプト
+│       ├── system.ts     # 不変システムプロンプト (ツールベース)
 │       └── personality.ts # 可変プロンプト (personality.json)
 ├── scheduler/
 │   ├── index.ts          # cron スケジューラー
@@ -65,21 +71,44 @@ data/
 
 ## アーキテクチャ
 
-### LLM レスポンス形式
+### Tool-Use Agent 方式
 
-メイン LLM は必ず以下の JSON を返す:
+メイン LLM は OpenAI Function Calling (tools) を使って行動する。JSON レスポンスのパースではなく、LLM がツール（関数）を呼び出すことで Discord を操作する。
 
-```json
-{
-  "action": "message" | "reply" | "reaction" | "none",
-  "content": "メッセージ内容 (message/reply)",
-  "emoji": "リアクション絵文字 (reaction)",
-  "personality_update": null | { ...部分更新 },
-  "memory_entry": null | "覚えておきたいこと（30字以内）",
-  "user_note": null | "username:メモ内容",
-  "reasoning": "行動の理由（内部ログ用）"
-}
-```
+**利点:**
+- LLM が Discord を人間のように自由に操作できる
+- 1ターンで複数アクション実行可能（リアクション + 返信 + メモリ保存 等）
+- ツール定義を追加するだけで新機能を拡張可能
+
+### ツール一覧
+
+**Discord ツール:**
+
+| ツール名 | パラメータ | 説明 |
+|---------|-----------|------|
+| `send_message` | `content` | チャンネルにメッセージ送信 |
+| `reply_to_message` | `content` | トリガーメッセージへの返信 |
+| `add_reaction` | `emoji` | リアクション追加 |
+| `edit_message` | `message_id`, `content` | bot のメッセージを編集 |
+| `delete_message` | `message_id` | メッセージを削除 |
+| `create_thread` | `name`, `message_id?` | スレッド作成 |
+| `send_embed` | `title`, `description?`, `color?`, `fields?` | Embed 送信 |
+| `pin_message` | `message_id` | メッセージをピン |
+| `unpin_message` | `message_id` | ピン解除 |
+| `fetch_messages` | `channel_id?`, `limit?` | メッセージ履歴取得 |
+| `get_channel_info` | `channel_id?` | チャンネル情報取得 |
+| `get_user_info` | `user_id` | ユーザー情報取得 |
+| `list_channels` | (なし) | サーバーのチャンネル一覧 |
+| `set_typing` | (なし) | 入力中表示 |
+| `do_nothing` | `reasoning` | 何もしない（理由を記録） |
+
+**記憶・人格ツール:**
+
+| ツール名 | パラメータ | 説明 |
+|---------|-----------|------|
+| `save_memory` | `entry` | 長期記憶に保存（30字以内） |
+| `save_user_note` | `username`, `note` | ユーザーメモ保存 |
+| `update_personality` | `mood?`, `recent_topics?`, `interests?` | 性格設定更新 |
 
 ### トリアージ LLM レスポンス形式
 
@@ -87,37 +116,35 @@ data/
 
 ```json
 {
-  "action": "ignore" | "reaction" | "reply" | "message",
-  "emoji": "リアクション絵文字 (reaction の場合)",
+  "action": "ignore" | "engage",
   "reasoning": "判定理由",
   "confidence": 0.0〜1.0
 }
 ```
 
-### イベントフロー（統一パイプライン）
+### イベントフロー（エージェントループ）
 
 ```
 メッセージ受信 → DB保存 → Bot除外 → スロットル判定(*) → トリアージLLM(高速) → 判定
                                     (* メンション時はスロットルをバイパス)
   トリアージ結果:
-  ├─ ignore:    reflection LLM(flash, fire-and-forget) → personality + memory 更新
-  ├─ reaction:  リアクション + reflection LLM(flash, fire-and-forget) → personality + memory 更新
-  ├─ reply:     メインLLM(SOUL+MEMORY注入) → message.reply() + personality + memory 更新
-  └─ message:   メインLLM(SOUL+MEMORY注入) → channel.send() + personality + memory 更新
+  ├─ ignore:  reflection LLM(flash, fire-and-forget) → personality + memory 更新
+  └─ engage:  エージェントループ起動
+       ├─ LLM に tools 定義 + SOUL + MEMORY + 会話履歴を送信
+       ├─ tool_calls → 各ツール実行 → 結果を LLM に返す → ループ
+       └─ finish_reason=stop → 終了（最大5イテレーション）
 
 cron (30分) → heartbeat タスクチェック
-  ├─ autonomous_post (30分): メインLLM(SOUL+MEMORY注入) → 投稿 + personality + memory 更新
+  ├─ autonomous_post (30分): エージェントループ → 自主発言 + personality + memory 更新
   ├─ distill_memory (6時間): 蒸留LLM(flash) → 日次記憶集約 + 長期記憶更新
   └─ cleanup_old_memory (24時間): 古い日次ファイルの整理
 ```
 
 - メンションかどうかに関わらず、全メッセージがトリアージを通る統一フロー
 - メンション情報はトリアージのコンテキストとして渡され、判断材料として使われる
-- トリアージは「この会話に混ざりたいか」を基準に判定する
-- **全イベントで人格(SOUL)と記憶(MEMORY)が更新される** (ignore/reaction時はreflection LLMが担当)
-
-1. **メッセージ受信** → DB 保存 → スロットル判定 → トリアージ LLM（メンション情報含む） → アクション実行 + 人格・記憶更新
-2. **定期タスク** → 30分ごとに heartbeat → 自主発言・記憶蒸留・古いファイル整理
+- トリアージは「この会話に混ざりたいか」を基準に `ignore` / `engage` の2択で判定
+- ignore 時は reflection LLM が人格・記憶を更新（fire-and-forget）
+- engage 時はエージェントループが起動し、LLM がツールで自由に行動
 
 ### DB テーブル
 
@@ -135,6 +162,7 @@ cron (30分) → heartbeat タスクチェック
 - `podman` & `podman-compose` がインストール済み
 - `.env` ファイルがプロジェクトルートに存在（`.env.example` を参照して作成）
 - `~/.gemini/` に Gemini 認証情報（`oauth_creds.json` 等）が存在
+- Discord Developer Portal で `GuildMembers` Privileged Intent を有効化
 
 ### デプロイコマンド
 
