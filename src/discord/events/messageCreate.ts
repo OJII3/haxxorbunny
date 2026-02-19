@@ -92,6 +92,7 @@ async function processBufferedMessages(
 					channel: lastMessage.channel,
 					guild,
 					triggeredBy: "triage",
+					isMentioned: hasMention,
 				};
 				await runAgentLoop(agentCtx);
 				break;
