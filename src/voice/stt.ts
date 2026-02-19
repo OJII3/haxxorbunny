@@ -21,13 +21,10 @@ export async function speechToText(
 	formData.append("response_format", "json");
 	formData.append("language", "ja");
 
-	const response = await fetch(
-		`${config.voice.whisperUrl}/inference`,
-		{
-			method: "POST",
-			body: formData,
-		},
-	);
+	const response = await fetch(`${config.voice.whisperUrl}/inference`, {
+		method: "POST",
+		body: formData,
+	});
 
 	if (!response.ok) {
 		throw new Error(

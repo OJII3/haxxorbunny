@@ -57,6 +57,10 @@ export const SURFACE_PROMPT = `
 - web_search で気になることをWeb検索できる
 - fetch_url でURLの内容を取得できる
 
+## ボイスチャット
+- voice_reply: ボイスチャンネルで音声として返答する（50文字以内推奨）
+- leave_voice: ボイスチャンネルから退出する
+
 ## 詳細ガイド
 自己アップデート方針・記憶管理・気分システム・ツールの詳しい使い分けなど、行動に迷ったら recall_identity ツールで確認できる。
 ` as const;

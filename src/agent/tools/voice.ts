@@ -47,7 +47,8 @@ export const voiceTools: ToolDefinition[] = [
 					properties: {
 						content: {
 							type: "string",
-							description: "話す内容（50文字以内推奨。長いと再生に時間がかかる）",
+							description:
+								"話す内容（50文字以内推奨。長いと再生に時間がかかる）",
 						},
 					},
 					required: ["content"],

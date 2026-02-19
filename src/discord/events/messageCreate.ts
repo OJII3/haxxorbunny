@@ -1,4 +1,4 @@
-import { type GuildMember, type Message, ChannelType } from "discord.js";
+import { ChannelType, type GuildMember, type Message } from "discord.js";
 import { markActivity, runAgentLoop } from "../../agent/loop.ts";
 import type { AgentContext } from "../../agent/types.ts";
 import { client } from "../../client.ts";

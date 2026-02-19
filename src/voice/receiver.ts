@@ -81,9 +81,7 @@ export class VoiceReceiverHandler {
 	private handleOpusPacket(userId: string, opusPacket: Buffer): void {
 		let pcm: Buffer;
 		try {
-			pcm = Buffer.from(
-				this.decoder.decode(opusPacket),
-			);
+			pcm = Buffer.from(this.decoder.decode(opusPacket));
 		} catch {
 			return; // デコード失敗は無視
 		}

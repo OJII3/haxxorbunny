@@ -1,24 +1,21 @@
+import { Readable } from "node:stream";
 import {
 	type AudioPlayer,
 	AudioPlayerStatus,
-	type VoiceConnection,
-	VoiceConnectionStatus,
 	createAudioPlayer,
 	createAudioResource,
 	entersState,
 	joinVoiceChannel,
+	type VoiceConnection,
+	VoiceConnectionStatus,
 } from "@discordjs/voice";
 import type { Guild, TextBasedChannel, VoiceBasedChannel } from "discord.js";
-import { Readable } from "node:stream";
 import { runAgentLoop } from "../agent/loop.ts";
 import type { AgentContext, VoiceContext } from "../agent/types.ts";
 import { config } from "../config.ts";
+import { type SpeechSegment, VoiceReceiverHandler } from "./receiver.ts";
 import { speechToText } from "./stt.ts";
 import { textToSpeech } from "./tts.ts";
-import {
-	type SpeechSegment,
-	VoiceReceiverHandler,
-} from "./receiver.ts";
 
 /** ボイスセッションの破棄理由 */
 export type DestroyReason =
@@ -93,9 +90,8 @@ export class VoiceSession {
 		this.connection.subscribe(this.player);
 
 		// 音声受信ハンドラ作成
-		this.receiver = new VoiceReceiverHandler(
-			this.connection,
-			(segment) => this.handleSpeech(segment),
+		this.receiver = new VoiceReceiverHandler(this.connection, (segment) =>
+			this.handleSpeech(segment),
 		);
 
 		// 現在 VC にいるメンバーの受信を開始
@@ -138,9 +134,7 @@ export class VoiceSession {
 	/** VC の人間メンバー数を確認して全員退出なら終了 */
 	checkEmpty(): void {
 		if (this.destroyed) return;
-		const humanMembers = this.voiceChannel.members.filter(
-			(m) => !m.user.bot,
-		);
+		const humanMembers = this.voiceChannel.members.filter((m) => !m.user.bot);
 		if (humanMembers.size === 0) {
 			console.log("[voice/session] All humans left the voice channel");
 			this.destroy("all_left");
