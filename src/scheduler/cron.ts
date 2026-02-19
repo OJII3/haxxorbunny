@@ -72,14 +72,14 @@ function cleanupOldMemory(guildId: string): void {
 	console.log(`[cleanup] Removed ${toRemove.length} old daily files`);
 }
 
-/** 高頻度タスク群: 3分ごと実行（agentBusy のみチェック） */
+/** 高頻度タスク群: 13分ごと実行（agentBusy のみチェック） */
 const FREQUENT_TASK_IDS = [
 	"autonomous_post",
 	"channel_patrol",
 	"goal_check",
 ] as const;
 
-/** 低頻度タスク群: 30分ごと実行（既存のスキップ条件を維持） */
+/** 低頻度タスク群: 2時間ごと実行（既存のスキップ条件を維持） */
 const INFREQUENT_TASK_IDS = [
 	"distill_memory",
 	"cleanup_old_memory",

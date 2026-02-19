@@ -61,7 +61,7 @@ src/
 │       ├── system.ts     # SURFACE_PROMPT (軽量要約) + SOUL_PROMPT (不変の本質) + IDENTITY_PROMPT (行動指針)
 │       └── personality.ts # 可変プロンプト (4次元気分ベクトル + personality.json)
 ├── scheduler/
-│   ├── index.ts          # cron スケジューラー (3分 + 30分 の2系統)
+│   ├── index.ts          # cron スケジューラー (13分 + 2時間 の2系統)
 │   ├── cron.ts           # 高頻度/低頻度タスク分離実行
 │   ├── patrol.ts         # チャンネル巡回ロジック
 │   └── goal-check.ts     # ゴールチェック cronタスク
@@ -183,12 +183,12 @@ scripts/
   → mood.sociability < 0.3 ならスキップ
   → エージェントループ起動 (triggeredBy: "reaction", reactionContext 付き)
 
-cron (3分) — 高頻度タスク（agentBusy のみチェック）
+cron (13分) — 高頻度タスク（agentBusy のみチェック）
   ├─ autonomous_post (15分): アクティブ時間内のみ → 自由行動プロンプト → エージェントループ
   ├─ channel_patrol (5分): 全チャンネルスキャン → bot不在10分超のチャンネル → エージェントループ
   └─ goal_check (30分): アクティブゴールあれば → ゴールコンテキスト付きエージェントループ
 
-cron (30分) — 低頻度タスク
+cron (2時間) — 低頻度タスク
   ├─ distill_memory (6時間): 蒸留LLM(flash) → 日次記憶集約 + 長期記憶更新
   ├─ cleanup_old_memory (24時間): 古い日次ファイルの整理
   └─ dream_processing (12時間): 夢処理LLM(flash) → 記憶連想分析 + 洞察生成
