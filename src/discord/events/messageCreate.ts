@@ -37,6 +37,9 @@ async function processBufferedMessages(
 	const lastMessage = messages.at(-1);
 	if (!lastMessage) return;
 
+	const guildId = lastMessage.guild?.id;
+	if (!guildId) return;
+
 	const channelId = lastMessage.channelId;
 	const authorName = lastMessage.author.displayName;
 
@@ -53,7 +56,7 @@ async function processBufferedMessages(
 	}
 
 	try {
-		const personality = loadPersonality();
+		const personality = loadPersonality(guildId);
 		const triageResult = await triage(
 			channelId,
 			combinedContent,
@@ -69,9 +72,14 @@ async function processBufferedMessages(
 		switch (triageResult.action) {
 			case "ignore": {
 				const ctx = buildConversationContext(channelId);
-				reflect(channelId, combinedContent, authorName, "ignore", ctx).catch(
-					(e) => console.error("[reflection] fire-and-forget error:", e),
-				);
+				reflect(
+					guildId,
+					channelId,
+					combinedContent,
+					authorName,
+					"ignore",
+					ctx,
+				).catch((e) => console.error("[reflection] fire-and-forget error:", e));
 				break;
 			}
 
@@ -104,6 +112,7 @@ setFlushHandler((messages, hasMention) => {
 export async function handleMessageCreate(message: Message): Promise<void> {
 	// すべてのメッセージを DB に保存
 	saveMessage({
+		guildId: message.guildId ?? "",
 		channelId: message.channelId,
 		userId: message.author.id,
 		username: message.author.displayName,

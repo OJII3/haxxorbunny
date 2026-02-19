@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { guildPersonalityPath } from "../../data/paths.ts";
 
 /** 4次元の気分ベクトル (各 0.0〜1.0) */
 export interface MoodState {
@@ -20,11 +20,6 @@ export interface Personality {
 	recent_topics: string[];
 	custom_instructions: string;
 }
-
-const PERSONALITY_PATH = join(
-	import.meta.dir,
-	"../../../data/personality.json",
-);
 
 const DEFAULT_MOOD: MoodState = {
 	energy: 0.5,
@@ -147,25 +142,32 @@ export function moodToText(mood: MoodState): string {
 	return parts.join("、");
 }
 
-export function loadPersonality(): Personality {
+export function loadPersonality(guildId: string): Personality {
+	const personalityPath = guildPersonalityPath(guildId);
 	try {
-		const raw = readFileSync(PERSONALITY_PATH, "utf-8");
+		const raw = readFileSync(personalityPath, "utf-8");
 		const parsed = JSON.parse(raw) as Record<string, unknown>;
 		return {
 			...(parsed as Omit<Personality, "mood">),
 			mood: migrateMood(parsed.mood),
 		} as Personality;
-	} catch (err) {
-		console.error(
-			"[personality] Failed to load personality.json, using defaults:",
-			err,
+	} catch {
+		// ギルドディレクトリにファイルがなければデフォルトで初期化
+		const defaultP = { ...DEFAULT_PERSONALITY, mood: { ...DEFAULT_MOOD } };
+		writeFileSync(
+			personalityPath,
+			JSON.stringify(defaultP, null, "\t"),
+			"utf-8",
 		);
-		return { ...DEFAULT_PERSONALITY, mood: { ...DEFAULT_MOOD } };
+		return defaultP;
 	}
 }
 
-export function updatePersonality(partial: Partial<Personality>): Personality {
-	const current = loadPersonality();
+export function updatePersonality(
+	guildId: string,
+	partial: Partial<Personality>,
+): Personality {
+	const current = loadPersonality(guildId);
 
 	// mood 更新時は補間を適用
 	let updatedMood = current.mood;
@@ -174,7 +176,8 @@ export function updatePersonality(partial: Partial<Personality>): Personality {
 	}
 
 	const updated = { ...current, ...partial, mood: updatedMood };
-	writeFileSync(PERSONALITY_PATH, JSON.stringify(updated, null, "\t"), "utf-8");
+	const personalityPath = guildPersonalityPath(guildId);
+	writeFileSync(personalityPath, JSON.stringify(updated, null, "\t"), "utf-8");
 	return updated;
 }
 

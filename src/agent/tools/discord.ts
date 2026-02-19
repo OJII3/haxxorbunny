@@ -29,7 +29,7 @@ const sendMessage: ToolHandler = async (args, ctx) => {
 	if (!content) return fail("content is required");
 
 	// cron トリガー時のみ重複チェック
-	if (ctx.triggeredBy === "cron" && isDuplicate(content)) {
+	if (ctx.triggeredBy === "cron" && isDuplicate(ctx.guild.id, content)) {
 		console.log(
 			"[dedup] Blocked duplicate cron message:",
 			content.slice(0, 50),
@@ -51,8 +51,9 @@ const sendMessage: ToolHandler = async (args, ctx) => {
 
 	if (!targetChannel.isSendable()) return fail("Channel is not sendable");
 	await targetChannel.send(content);
-	recordMessage(content);
+	recordMessage(ctx.guild.id, content);
 	saveMessage({
+		guildId: ctx.guild.id,
 		channelId: targetChannel.id,
 		userId: botUserId(),
 		username: "haxxorbunny",
@@ -69,6 +70,7 @@ const replyToMessage: ToolHandler = async (args, ctx) => {
 	if (!ctx.triggerMessage) return fail("No trigger message to reply to");
 	await ctx.triggerMessage.reply(content);
 	saveMessage({
+		guildId: ctx.guild.id,
 		channelId: ctx.channel.id,
 		userId: botUserId(),
 		username: "haxxorbunny",

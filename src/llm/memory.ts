@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { guildDailyMemoryDir, guildMemoryPath } from "../data/paths.ts";
 
 /** 感情付き記憶エントリ */
 export interface MemoryEntry {
@@ -19,29 +20,30 @@ interface DailyMemory {
 	entries: string[];
 }
 
-const DATA_DIR = join(import.meta.dir, "../../data");
-const MEMORY_PATH = join(DATA_DIR, "memory.json");
-const DAILY_DIR = join(DATA_DIR, "memory");
-
 const MAX_ENTRIES = 100;
 const MAX_USER_NOTES = 10;
 const PROMPT_TOP_ENTRIES = 20;
 
-// 簡易 mutex: ファイルの Read-Modify-Write を直列化する
-let memoryLock = Promise.resolve();
+// 簡易 mutex: ギルドごとにファイルの Read-Modify-Write を直列化する
+const memoryLocks = new Map<string, Promise<void>>();
 
-function withMemoryLock<T>(fn: () => T): Promise<T> {
-	const next = memoryLock.then(fn, fn);
-	memoryLock = next.then(
-		() => {},
-		() => {},
+function withMemoryLock<T>(guildId: string, fn: () => T): Promise<T> {
+	const current = memoryLocks.get(guildId) ?? Promise.resolve();
+	const next = current.then(fn, fn);
+	memoryLocks.set(
+		guildId,
+		next.then(
+			() => {},
+			() => {},
+		),
 	);
 	return next;
 }
 
-function ensureDailyDir(): void {
-	if (!existsSync(DAILY_DIR)) {
-		mkdirSync(DAILY_DIR, { recursive: true });
+function ensureDailyDir(guildId: string): void {
+	const dir = guildDailyMemoryDir(guildId);
+	if (!existsSync(dir)) {
+		mkdirSync(dir, { recursive: true });
 	}
 }
 
@@ -79,9 +81,10 @@ export function computeRecallScore(entry: MemoryEntry): number {
 	return 0.6 * recency + 0.3 * emotion + 0.1 * random;
 }
 
-export function loadMemory(): Memory {
+export function loadMemory(guildId: string): Memory {
+	const memoryPath = guildMemoryPath(guildId);
 	try {
-		const raw = readFileSync(MEMORY_PATH, "utf-8");
+		const raw = readFileSync(memoryPath, "utf-8");
 		return JSON.parse(raw) as Memory;
 	} catch {
 		const defaultMemory: Memory = {
@@ -89,22 +92,24 @@ export function loadMemory(): Memory {
 			user_notes: {},
 			last_updated: "",
 		};
-		saveMemory(defaultMemory);
+		saveMemory(guildId, defaultMemory);
 		return defaultMemory;
 	}
 }
 
-export function saveMemory(memory: Memory): void {
+export function saveMemory(guildId: string, memory: Memory): void {
 	memory.last_updated = new Date().toISOString();
-	writeFileSync(MEMORY_PATH, JSON.stringify(memory, null, "\t"), "utf-8");
+	const memoryPath = guildMemoryPath(guildId);
+	writeFileSync(memoryPath, JSON.stringify(memory, null, "\t"), "utf-8");
 }
 
 export function appendMemoryEntry(
+	guildId: string,
 	entry: string,
 	emotionalImpact = 2,
 ): Promise<void> {
-	return withMemoryLock(() => {
-		const memory = loadMemory();
+	return withMemoryLock(guildId, () => {
+		const memory = loadMemory(guildId);
 		const memoryEntry: MemoryEntry = {
 			text: entry,
 			emotional_impact: Math.max(1, Math.min(5, emotionalImpact)),
@@ -121,15 +126,19 @@ export function appendMemoryEntry(
 				.sort((a, b) => b.score - a.score);
 			memory.entries = scored.slice(0, MAX_ENTRIES).map((s) => s.entry);
 		}
-		saveMemory(memory);
-		appendDailyEntry(entry);
+		saveMemory(guildId, memory);
+		appendDailyEntry(guildId, entry);
 		console.log(`[memory] Added (impact=${emotionalImpact}): ${entry}`);
 	});
 }
 
-export function addUserNote(username: string, note: string): Promise<void> {
-	return withMemoryLock(() => {
-		const memory = loadMemory();
+export function addUserNote(
+	guildId: string,
+	username: string,
+	note: string,
+): Promise<void> {
+	return withMemoryLock(guildId, () => {
+		const memory = loadMemory(guildId);
 		if (!memory.user_notes[username]) {
 			memory.user_notes[username] = [];
 		}
@@ -139,7 +148,7 @@ export function addUserNote(username: string, note: string): Promise<void> {
 				-MAX_USER_NOTES,
 			);
 		}
-		saveMemory(memory);
+		saveMemory(guildId, memory);
 		console.log(`[memory] User note for ${username}:`, note);
 	});
 }
@@ -189,16 +198,17 @@ function todayKey(): string {
 	return new Date().toISOString().slice(0, 10);
 }
 
-export function appendDailyEntry(entry: string): void {
-	ensureDailyDir();
+export function appendDailyEntry(guildId: string, entry: string): void {
+	ensureDailyDir(guildId);
 	const key = todayKey();
-	const daily = loadDailyMemory(key);
+	const daily = loadDailyMemory(guildId, key);
 	daily.entries.push(entry);
-	saveDailyMemory(key, daily);
+	saveDailyMemory(guildId, key, daily);
 }
 
-export function loadDailyMemory(dateKey: string): DailyMemory {
-	const filePath = join(DAILY_DIR, `${dateKey}.json`);
+export function loadDailyMemory(guildId: string, dateKey: string): DailyMemory {
+	const dir = guildDailyMemoryDir(guildId);
+	const filePath = join(dir, `${dateKey}.json`);
 	try {
 		const raw = readFileSync(filePath, "utf-8");
 		return JSON.parse(raw) as DailyMemory;
@@ -207,18 +217,26 @@ export function loadDailyMemory(dateKey: string): DailyMemory {
 	}
 }
 
-export function saveDailyMemory(dateKey: string, daily: DailyMemory): void {
-	ensureDailyDir();
-	const filePath = join(DAILY_DIR, `${dateKey}.json`);
+export function saveDailyMemory(
+	guildId: string,
+	dateKey: string,
+	daily: DailyMemory,
+): void {
+	ensureDailyDir(guildId);
+	const dir = guildDailyMemoryDir(guildId);
+	const filePath = join(dir, `${dateKey}.json`);
 	writeFileSync(filePath, JSON.stringify(daily, null, "\t"), "utf-8");
 }
 
-export function processMemoryFields(fields: {
-	memory_entry?: string | null;
-	user_note?: string | null;
-}): void {
+export function processMemoryFields(
+	guildId: string,
+	fields: {
+		memory_entry?: string | null;
+		user_note?: string | null;
+	},
+): void {
 	if (fields.memory_entry) {
-		appendMemoryEntry(fields.memory_entry);
+		appendMemoryEntry(guildId, fields.memory_entry);
 	}
 	if (fields.user_note) {
 		const colonIndex = fields.user_note.indexOf(":");
@@ -226,7 +244,7 @@ export function processMemoryFields(fields: {
 			const username = fields.user_note.slice(0, colonIndex).trim();
 			const note = fields.user_note.slice(colonIndex + 1).trim();
 			if (username && note) {
-				addUserNote(username, note);
+				addUserNote(guildId, username, note);
 			}
 		}
 	}

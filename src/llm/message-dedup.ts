@@ -13,9 +13,9 @@ interface CacheEntry {
 
 const recentMessages: CacheEntry[] = [];
 
-function computeHash(text: string): string {
+function computeHash(guildId: string, text: string): string {
 	const hasher = new Bun.CryptoHasher("sha256");
-	hasher.update(text.trim().toLowerCase());
+	hasher.update(`${guildId}:${text.trim().toLowerCase()}`);
 	return hasher.digest("hex");
 }
 
@@ -35,11 +35,11 @@ function cleanExpired(): void {
  * メッセージが最近送信済みかどうかを判定する
  * 完全一致ハッシュ + 冒頭50文字のプレフィックスハッシュの両方をチェック
  */
-export function isDuplicate(content: string): boolean {
+export function isDuplicate(guildId: string, content: string): boolean {
 	cleanExpired();
 
-	const fullHash = computeHash(content);
-	const prefixHash = computeHash(content.slice(0, PREFIX_LENGTH));
+	const fullHash = computeHash(guildId, content);
+	const prefixHash = computeHash(guildId, content.slice(0, PREFIX_LENGTH));
 
 	return recentMessages.some(
 		(entry) => entry.hash === fullHash || entry.hash === prefixHash,
@@ -49,15 +49,15 @@ export function isDuplicate(content: string): boolean {
 /**
  * メッセージをキャッシュに記録する
  */
-export function recordMessage(content: string): void {
+export function recordMessage(guildId: string, content: string): void {
 	cleanExpired();
 
 	const now = Date.now();
 	const expiresAt = now + CACHE_TTL_MS;
 
-	recentMessages.push({ hash: computeHash(content), expiresAt });
+	recentMessages.push({ hash: computeHash(guildId, content), expiresAt });
 	recentMessages.push({
-		hash: computeHash(content.slice(0, PREFIX_LENGTH)),
+		hash: computeHash(guildId, content.slice(0, PREFIX_LENGTH)),
 		expiresAt,
 	});
 }

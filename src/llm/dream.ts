@@ -39,8 +39,8 @@ haxxorbunny の長期記憶全体を受け取り、"夢"のように自由に連
 - 夢なのでクリエイティブに。意外な組み合わせを楽しんで
 `.trim();
 
-export async function processDream(): Promise<void> {
-	const memory = loadMemory();
+export async function processDream(guildId: string): Promise<void> {
+	const memory = loadMemory(guildId);
 
 	if (memory.entries.length < 5) {
 		console.log("[dream] Not enough memories to dream about, skipping");
@@ -97,7 +97,7 @@ ${memoryList}
 				memory.entries.splice(idx, 1);
 			}
 			if (validIndices.length > 0) {
-				saveMemory(memory);
+				saveMemory(guildId, memory);
 				console.log(`[dream] Forgot ${validIndices.length} memories`);
 			}
 		}
@@ -106,10 +106,10 @@ ${memoryList}
 		for (const insight of result.insights.slice(0, 3)) {
 			const dreamEntry = `[dream] ${insight}`;
 			if (dreamEntry.length <= 30) {
-				await appendMemoryEntry(dreamEntry, 3);
+				await appendMemoryEntry(guildId, dreamEntry, 3);
 			} else {
 				// 30文字制限は dream タグを含めて超える場合がある
-				await appendMemoryEntry(dreamEntry.slice(0, 30), 3);
+				await appendMemoryEntry(guildId, dreamEntry.slice(0, 30), 3);
 			}
 			console.log(`[dream] Insight saved: ${insight}`);
 		}

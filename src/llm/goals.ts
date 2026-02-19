@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { guildGoalsPath } from "../data/paths.ts";
 
 export interface Goal {
 	id: string;
@@ -17,35 +17,37 @@ export interface GoalsData {
 	last_review: string;
 }
 
-const GOALS_PATH = join(import.meta.dir, "../../data/goals.json");
 const MAX_ACTIVE_GOALS = 5;
 
-export function loadGoals(): GoalsData {
+export function loadGoals(guildId: string): GoalsData {
+	const goalsPath = guildGoalsPath(guildId);
 	try {
-		const raw = readFileSync(GOALS_PATH, "utf-8");
+		const raw = readFileSync(goalsPath, "utf-8");
 		return JSON.parse(raw) as GoalsData;
 	} catch {
 		const defaultData: GoalsData = { goals: [], last_review: "" };
-		saveGoals(defaultData);
+		saveGoals(guildId, defaultData);
 		return defaultData;
 	}
 }
 
-export function saveGoals(data: GoalsData): void {
-	writeFileSync(GOALS_PATH, JSON.stringify(data, null, "\t"), "utf-8");
+export function saveGoals(guildId: string, data: GoalsData): void {
+	const goalsPath = guildGoalsPath(guildId);
+	writeFileSync(goalsPath, JSON.stringify(data, null, "\t"), "utf-8");
 }
 
-export function getActiveGoals(): Goal[] {
-	const data = loadGoals();
+export function getActiveGoals(guildId: string): Goal[] {
+	const data = loadGoals(guildId);
 	return data.goals.filter((g) => g.status === "active");
 }
 
 export function addGoal(
+	guildId: string,
 	title: string,
 	description: string,
 	priority: "low" | "medium" | "high" = "medium",
 ): Goal | null {
-	const data = loadGoals();
+	const data = loadGoals(guildId);
 	const activeCount = data.goals.filter((g) => g.status === "active").length;
 
 	if (activeCount >= MAX_ACTIVE_GOALS) {
@@ -65,49 +67,53 @@ export function addGoal(
 	};
 
 	data.goals.push(goal);
-	saveGoals(data);
+	saveGoals(guildId, data);
 	console.log(`[goals] Added: ${title} (priority=${priority})`);
 	return goal;
 }
 
-export function updateGoalProgress(goalId: string, note: string): boolean {
-	const data = loadGoals();
+export function updateGoalProgress(
+	guildId: string,
+	goalId: string,
+	note: string,
+): boolean {
+	const data = loadGoals(guildId);
 	const goal = data.goals.find((g) => g.id === goalId && g.status === "active");
 	if (!goal) return false;
 
 	goal.progress_notes.push(`[${new Date().toISOString()}] ${note}`);
 	goal.updated_at = new Date().toISOString();
-	saveGoals(data);
+	saveGoals(guildId, data);
 	console.log(`[goals] Progress on ${goal.title}: ${note}`);
 	return true;
 }
 
-export function completeGoal(goalId: string): boolean {
-	const data = loadGoals();
+export function completeGoal(guildId: string, goalId: string): boolean {
+	const data = loadGoals(guildId);
 	const goal = data.goals.find((g) => g.id === goalId && g.status === "active");
 	if (!goal) return false;
 
 	goal.status = "completed";
 	goal.updated_at = new Date().toISOString();
-	saveGoals(data);
+	saveGoals(guildId, data);
 	console.log(`[goals] Completed: ${goal.title}`);
 	return true;
 }
 
-export function abandonGoal(goalId: string): boolean {
-	const data = loadGoals();
+export function abandonGoal(guildId: string, goalId: string): boolean {
+	const data = loadGoals(guildId);
 	const goal = data.goals.find((g) => g.id === goalId && g.status === "active");
 	if (!goal) return false;
 
 	goal.status = "abandoned";
 	goal.updated_at = new Date().toISOString();
-	saveGoals(data);
+	saveGoals(guildId, data);
 	console.log(`[goals] Abandoned: ${goal.title}`);
 	return true;
 }
 
-export function goalsToPrompt(): string {
-	const active = getActiveGoals();
+export function goalsToPrompt(guildId: string): string {
+	const active = getActiveGoals(guildId);
 	if (active.length === 0) return "";
 
 	const priorityOrder = { high: 0, medium: 1, low: 2 };

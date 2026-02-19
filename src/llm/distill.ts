@@ -39,16 +39,19 @@ const DISTILL_SYSTEM_PROMPT = `
 - 大半の場合、削除は不要
 `.trim();
 
-export async function distillDailyMemory(dateKey?: string): Promise<void> {
+export async function distillDailyMemory(
+	guildId: string,
+	dateKey?: string,
+): Promise<void> {
 	const key = dateKey ?? new Date().toISOString().slice(0, 10);
-	const daily = loadDailyMemory(key);
+	const daily = loadDailyMemory(guildId, key);
 
 	if (daily.entries.length === 0) {
 		console.log(`[distill] ${key}: エントリなし、スキップ`);
 		return;
 	}
 
-	const memory = loadMemory();
+	const memory = loadMemory(guildId);
 
 	const longTermList =
 		memory.entries.length > 0
@@ -133,11 +136,11 @@ ${longTermList}
 			memory.entries = memory.entries.slice(-100);
 		}
 
-		saveMemory(memory);
+		saveMemory(guildId, memory);
 
 		// 日次ファイルにサマリーを追記
 		daily.entries.push(`[蒸留サマリー] ${result.summary}`);
-		saveDailyMemory(key, daily);
+		saveDailyMemory(guildId, key, daily);
 
 		console.log(
 			`[distill] ${key} | summary: ${result.summary} | reason: ${result.reasoning}`,

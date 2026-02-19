@@ -1,9 +1,9 @@
 import { existsSync, readdirSync, unlinkSync } from "node:fs";
-import { join } from "node:path";
 import { ChannelType, type Guild, type TextChannel } from "discord.js";
-import { isAgentBusy, runAgentLoop } from "../agent/loop.ts";
+import { isAgentBusyForGuild, runAgentLoop } from "../agent/loop.ts";
 import type { AgentContext } from "../agent/types.ts";
 import { client } from "../client.ts";
+import { guildDailyMemoryDir } from "../data/paths.ts";
 import { getActiveChannelIds } from "../db/queries.ts";
 import { distillDailyMemory } from "../llm/distill.ts";
 import { processDream } from "../llm/dream.ts";
@@ -15,7 +15,7 @@ import {
 } from "../llm/heartbeat.ts";
 
 function selectChannel(guild: Guild): TextChannel | undefined {
-	const activeIds = getActiveChannelIds();
+	const activeIds = getActiveChannelIds(guild.id);
 	for (const id of activeIds) {
 		const ch = guild.channels.cache.get(id);
 		if (ch?.type === ChannelType.GuildText) {
@@ -46,26 +46,26 @@ async function postToGuild(guild: Guild): Promise<void> {
 	console.log(`[cron] ${guild.name}/#${channel.name} | agent loop completed`);
 }
 
-const DAILY_DIR = join(import.meta.dir, "../../data/memory");
 const MAX_DAILY_FILES = 30;
 
-function cleanupOldMemory(): void {
-	if (!existsSync(DAILY_DIR)) return;
+function cleanupOldMemory(guildId: string): void {
+	const dailyDir = guildDailyMemoryDir(guildId);
+	if (!existsSync(dailyDir)) return;
 
-	const files = readdirSync(DAILY_DIR)
+	const files = readdirSync(dailyDir)
 		.filter((f) => f.endsWith(".json"))
 		.sort();
 
 	if (files.length <= MAX_DAILY_FILES) {
 		console.log(
-			`[cleanup] ${files.length} daily files, within limit (${MAX_DAILY_FILES})`,
+			`[cleanup] ${guildId}: ${files.length} daily files, within limit (${MAX_DAILY_FILES})`,
 		);
 		return;
 	}
 
 	const toRemove = files.slice(0, files.length - MAX_DAILY_FILES);
 	for (const file of toRemove) {
-		const filePath = join(DAILY_DIR, file);
+		const filePath = `${dailyDir}/${file}`;
 		unlinkSync(filePath);
 		console.log(`[cleanup] Removed old daily memory: ${file}`);
 	}
@@ -87,11 +87,6 @@ const INFREQUENT_TASK_IDS = [
 ] as const;
 
 async function runFrequentTasks(): Promise<void> {
-	if (isAgentBusy()) {
-		console.log("[frequent] Skipped: agent is currently active");
-		return;
-	}
-
 	const heartbeat = loadHeartbeat();
 
 	for (const task of heartbeat.tasks) {
@@ -112,8 +107,13 @@ async function runFrequentTasks(): Promise<void> {
 						);
 						break;
 					}
-					const guilds = client.guilds.cache;
-					for (const guild of guilds.values()) {
+					for (const guild of client.guilds.cache.values()) {
+						if (isAgentBusyForGuild(guild.id)) {
+							console.log(
+								`[frequent] autonomous_post skipped for ${guild.name}: agent busy`,
+							);
+							continue;
+						}
 						await postToGuild(guild);
 					}
 					break;
@@ -125,13 +125,11 @@ async function runFrequentTasks(): Promise<void> {
 						);
 						break;
 					}
-					// Phase 3 で実装: patrolChannels()
 					const { patrolChannels } = await import("./patrol.ts");
 					await patrolChannels();
 					break;
 				}
 				case "goal_check": {
-					// Phase 2 で実装: checkGoals()
 					const { checkGoals } = await import("./goal-check.ts");
 					await checkGoals();
 					break;
@@ -149,11 +147,6 @@ async function runFrequentTasks(): Promise<void> {
 }
 
 async function runInfrequentTasks(): Promise<void> {
-	if (isAgentBusy()) {
-		console.log("[infrequent] Skipped: agent is currently active");
-		return;
-	}
-
 	const heartbeat = loadHeartbeat();
 
 	for (const task of heartbeat.tasks) {
@@ -170,13 +163,19 @@ async function runInfrequentTasks(): Promise<void> {
 		try {
 			switch (task.id) {
 				case "distill_memory":
-					await distillDailyMemory();
+					for (const guild of client.guilds.cache.values()) {
+						await distillDailyMemory(guild.id);
+					}
 					break;
 				case "cleanup_old_memory":
-					cleanupOldMemory();
+					for (const guild of client.guilds.cache.values()) {
+						cleanupOldMemory(guild.id);
+					}
 					break;
 				case "dream_processing":
-					await processDream();
+					for (const guild of client.guilds.cache.values()) {
+						await processDream(guild.id);
+					}
 					break;
 				default:
 					console.warn(`[infrequent] Unknown task: ${task.id}`);
