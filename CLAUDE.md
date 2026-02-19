@@ -30,9 +30,11 @@ src/
 ├── index.ts              # エントリポイント
 ├── client.ts             # Discord Client (GuildMembers intent 含む)
 ├── config.ts             # 環境変数
+├── data/
+│   └── paths.ts          # ギルドごとのデータパスユーティリティ
 ├── agent/
 │   ├── types.ts          # AgentContext, ToolResult, ToolHandler 等の型定義
-│   ├── loop.ts           # エージェントループ本体 (MAX_ITERATIONS=10)
+│   ├── loop.ts           # エージェントループ本体 (MAX_ITERATIONS=10, ギルドごとに busy 管理)
 │   └── tools/
 │       ├── index.ts      # ツールレジストリ（定義集約 + 名前→ハンドラ Map）
 │       ├── discord.ts    # Discord 操作ツール群
@@ -69,13 +71,17 @@ src/
     ├── migrate.ts        # テーブル作成
     └── queries.ts        # クエリヘルパー
 data/
-├── personality.json      # SOUL: 可変プロンプト (bot が自己更新可能)
-├── memory.json           # MEMORY: 長期記憶 (bot が自動更新)
-├── goals.json            # GOALS: ゴール管理 (bot が自己更新可能)
-├── heartbeat.json        # HEARTBEAT: 定期タスク設定
-├── memory/               # 日次記憶蒸留 (gitignore)
-│   └── YYYY-MM-DD.json
-└── haxxorbunny.db        # SQLite DB (gitignore)
+├── heartbeat.json        # HEARTBEAT: グローバル定期タスク設定
+├── guilds/               # ギルドごとのデータ (自動作成)
+│   └── {guildId}/
+│       ├── personality.json  # SOUL: 可変プロンプト (bot が自己更新可能)
+│       ├── memory.json       # MEMORY: 長期記憶 (bot が自動更新)
+│       ├── goals.json        # GOALS: ゴール管理 (bot が自己更新可能)
+│       └── memory/           # 日次記憶蒸留
+│           └── YYYY-MM-DD.json
+├── haxxorbunny.db        # SQLite DB (gitignore)
+scripts/
+└── migrate-to-guild.ts   # 既存データ移行スクリプト
 ```
 
 ## アーキテクチャ
@@ -220,10 +226,26 @@ cron (30分) — 低頻度タスク
 - **ゴール駆動行動**: bot が自分で目標を設定し、cron で定期的に進捗確認・アクション実行
 - **チャンネル巡回**: bot が不在のチャンネルを定期的にスキャンし、会話があれば参加を検討
 
+### ギルドごとのデータ分離
+
+personality.json / memory.json / goals.json はギルド（Discord サーバー）ごとに `data/guilds/{guildId}/` に保存され、各サーバーで独立したパーソナリティ・記憶・ゴールを維持する。
+
+| 項目 | スコープ | 理由 |
+|------|---------|------|
+| personality.json | ギルドごと | サーバーごとに独立した人格 |
+| memory.json | ギルドごと | サーバーごとに独立した記憶 |
+| goals.json | ギルドごと | サーバーごとに独立した目標 |
+| heartbeat.json | グローバル | タスクスケジュールはボット全体の設定 |
+| isAgentBusy | ギルドごと | 複数ギルドで同時にエージェント実行可能 |
+| message-dedup | guildId をハッシュに含む | ギルド間で同じ発言を許可 |
+| DB (messages, bot_actions) | guild_id カラム | ギルド限定クエリに対応 |
+
+**移行**: 既存データは `bun run scripts/migrate-to-guild.ts <guildId>` で移行可能。
+
 ### DB テーブル
 
-- `messages` — 全チャンネルの会話ログ
-- `bot_actions` — bot の行動ログ (action, reasoning, triggeredBy)
+- `messages` — 全チャンネルの会話ログ (guild_id カラムあり)
+- `bot_actions` — bot の行動ログ (action, reasoning, triggeredBy, guild_id)
 
 ## 環境変数
 
@@ -267,7 +289,7 @@ podman-compose ps
 
 ### データ永続化
 
-- `bot-data` ボリューム → `/app/data`（SQLite DB, personality.json, memory.json, goals.json, heartbeat.json, memory/）
+- `bot-data` ボリューム → `/app/data`（SQLite DB, heartbeat.json, guilds/{guildId}/personality.json, memory.json, goals.json, memory/）
 - `aiclient-configs` ボリューム → aiclient 設定
 
 ## コーディング規約
