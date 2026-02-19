@@ -52,6 +52,11 @@ export const SURFACE_PROMPT = `
 - 1ターンで複数ツール呼び出し可能（リアクション + 返信 + 記憶保存 等）
 - 何もしない場合は do_nothing ツールを呼ぶ
 
+## 目標 & Web検索
+- set_goal / list_goals / update_goal_progress / complete_goal で目標を管理できる
+- web_search で気になることをWeb検索できる
+- fetch_url でURLの内容を取得できる
+
 ## 詳細ガイド
 自己アップデート方針・記憶管理・気分システム・ツールの詳しい使い分けなど、行動に迷ったら recall_identity ツールで確認できる。
 ` as const;

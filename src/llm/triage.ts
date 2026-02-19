@@ -1,5 +1,6 @@
 import { config } from "../config.ts";
 import { getLastBotAction, getRecentMessages } from "../db/queries.ts";
+import type { MoodState } from "./prompts/personality.ts";
 import { triageLlm } from "./triage-client.ts";
 
 export interface TriageResult {
@@ -8,11 +9,38 @@ export interface TriageResult {
 	confidence: number;
 }
 
-const TRIAGE_SYSTEM_PROMPT = `
-あなたは Discord bot "haxxorbunny" のトリアージ判定エンジンです。
-与えられたメッセージと会話コンテキストから、bot がこの会話に参加すべきかどうかを判定してください。
+/**
+ * mood の sociability + curiosity の平均で3段階の方針を切り替える
+ */
+function buildTriageSystemPrompt(mood?: MoodState): string {
+	const avg = mood ? (mood.sociability + mood.curiosity) / 2 : 0.5;
 
-## 判定基準 — 本当に必要なときだけ参加する
+	let policySection: string;
+
+	if (avg > 0.7) {
+		// 積極的: 迷ったら engage
+		policySection = `## 判定基準 — 積極的に参加する
+- engage: 基本はこちら。会話に参加できそうなら積極的に加わる
+- ignore: 以下の条件に該当する場合のみ
+
+## ignore すべき場面
+1. **完全に無関係**: 自分に全く関係ない事務連絡
+2. **邪魔になる**: 真剣な議論に茶々を入れることになる場合
+3. **直前に発言済み**: ごく最近発言したばかりで連投になる場合
+
+## engage すべき場面
+1. **メンションされている**: ほぼ確実に engage
+2. **面白そうな話題**: 自分が興味を持てる、コメントできそうな話題
+3. **会話が途切れそう**: 話題を広げたり盛り上げたりできそうなとき
+4. **質問や疑問がある**: 誰かの発言に反応したくなったとき
+5. **雑談の輪に入りたい**: 気軽な会話にも参加してOK
+
+## 基本方針
+- **積極的**であること。迷ったら engage を選ぶ
+- 話しかけられていなくても、面白そうなら参加する`;
+	} else if (avg > 0.4) {
+		// 普通: 既存と同等
+		policySection = `## 判定基準 — 必要なときに参加する
 - ignore: 基本はこちら。普通の会話には割り込まない
 - engage: 以下の条件に該当する場合のみ
 
@@ -25,7 +53,26 @@ const TRIAGE_SYSTEM_PROMPT = `
 ## 基本方針
 - **控えめ**であること。迷ったら ignore を選ぶ
 - 普通の雑談、盛り上がっている会話、独り言には割り込まない
-- 自分が参加しなくても会話が成立する場合は ignore
+- 自分が参加しなくても会話が成立する場合は ignore`;
+	} else {
+		// 控えめ: メンションのみ
+		policySection = `## 判定基準 — メンションのみに反応する
+- ignore: 基本はこちら。メンション以外には反応しない
+- engage: メンション時のみ
+
+## engage すべき場面
+1. **メンションされている**: bot に直接話しかけられている場合のみ engage
+
+## 基本方針
+- **非常に控えめ**であること。メンション以外は基本的に ignore
+- 今は一人でいたい気分なので、積極的に会話に参加しない`;
+	}
+
+	return `
+あなたは Discord bot "haxxorbunny" のトリアージ判定エンジンです。
+与えられたメッセージと会話コンテキストから、bot がこの会話に参加すべきかどうかを判定してください。
+
+${policySection}
 
 ## コンテキスト考慮
 - 直近の会話の流れ（複数の話題が混在していないか）
@@ -36,6 +83,7 @@ const TRIAGE_SYSTEM_PROMPT = `
 JSON のみを返すこと。それ以外のテキストは一切不要。reasoning は10字以内。
 {"action":"ignore","reasoning":"理由","confidence":0.8}
 `.trim();
+}
 
 function buildTriageContext(
 	channelId: string,
@@ -77,6 +125,7 @@ export async function triage(
 	messageContent: string,
 	authorName: string,
 	isMentioned: boolean,
+	mood?: MoodState,
 ): Promise<TriageResult> {
 	const context = buildTriageContext(
 		channelId,
@@ -85,11 +134,13 @@ export async function triage(
 		isMentioned,
 	);
 
+	const systemPrompt = buildTriageSystemPrompt(mood);
+
 	try {
 		const response = await triageLlm.chat.completions.create({
 			model: config.triage.model,
 			messages: [
-				{ role: "system", content: TRIAGE_SYSTEM_PROMPT },
+				{ role: "system", content: systemPrompt },
 				{ role: "user", content: context },
 			],
 			temperature: 0.3,

@@ -7,7 +7,19 @@
 		{
 			"id": "autonomous_post",
 			"description": "自主的に独り言を投稿する",
-			"interval_minutes": 10,
+			"interval_minutes": 15,
+			"enabled": true
+		},
+		{
+			"id": "channel_patrol",
+			"description": "チャンネルを巡回して未参加の会話に反応する",
+			"interval_minutes": 5,
+			"enabled": true
+		},
+		{
+			"id": "goal_check",
+			"description": "アクティブな目標の進捗確認・アクション実行",
+			"interval_minutes": 30,
 			"enabled": true
 		},
 		{

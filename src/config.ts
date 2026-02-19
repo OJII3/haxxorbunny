@@ -30,4 +30,7 @@ export const config = {
 		ms: Number(process.env.MESSAGE_BUFFER_MS ?? "3000"),
 		maxMs: Number(process.env.MESSAGE_BUFFER_MAX_MS ?? "15000"),
 	},
+	search: {
+		endpoint: process.env.SEARXNG_URL ?? "",
+	},
 } as const;

@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { ChannelType, type Guild, type TextChannel } from "discord.js";
-import { hasRecentActivity, isAgentBusy, runAgentLoop } from "../agent/loop.ts";
+import { isAgentBusy, runAgentLoop } from "../agent/loop.ts";
 import type { AgentContext } from "../agent/types.ts";
 import { client } from "../client.ts";
 import { getActiveChannelIds } from "../db/queries.ts";
@@ -72,32 +72,43 @@ function cleanupOldMemory(): void {
 	console.log(`[cleanup] Removed ${toRemove.length} old daily files`);
 }
 
-async function runHeartbeatTasks(): Promise<void> {
-	if (isAgentBusy()) {
-		console.log("[heartbeat] Skipped: agent is currently active");
-		return;
-	}
+/** 高頻度タスク群: 3分ごと実行（agentBusy のみチェック） */
+const FREQUENT_TASK_IDS = [
+	"autonomous_post",
+	"channel_patrol",
+	"goal_check",
+] as const;
 
-	if (hasRecentActivity(5)) {
-		console.log(
-			"[heartbeat] Skipped: conversation active within last 5 minutes",
-		);
+/** 低頻度タスク群: 30分ごと実行（既存のスキップ条件を維持） */
+const INFREQUENT_TASK_IDS = [
+	"distill_memory",
+	"cleanup_old_memory",
+	"dream_processing",
+] as const;
+
+async function runFrequentTasks(): Promise<void> {
+	if (isAgentBusy()) {
+		console.log("[frequent] Skipped: agent is currently active");
 		return;
 	}
 
 	const heartbeat = loadHeartbeat();
 
 	for (const task of heartbeat.tasks) {
+		if (
+			!FREQUENT_TASK_IDS.includes(task.id as (typeof FREQUENT_TASK_IDS)[number])
+		)
+			continue;
 		if (!shouldRunTask(task)) continue;
 
-		console.log(`[heartbeat] Running task: ${task.id}`);
+		console.log(`[frequent] Running task: ${task.id}`);
 
 		try {
 			switch (task.id) {
 				case "autonomous_post": {
 					if (!isWithinActiveHours(heartbeat)) {
 						console.log(
-							"[heartbeat] autonomous_post skipped: outside active hours",
+							"[frequent] autonomous_post skipped: outside active hours",
 						);
 						break;
 					}
@@ -107,6 +118,57 @@ async function runHeartbeatTasks(): Promise<void> {
 					}
 					break;
 				}
+				case "channel_patrol": {
+					if (!isWithinActiveHours(heartbeat)) {
+						console.log(
+							"[frequent] channel_patrol skipped: outside active hours",
+						);
+						break;
+					}
+					// Phase 3 で実装: patrolChannels()
+					const { patrolChannels } = await import("./patrol.ts");
+					await patrolChannels();
+					break;
+				}
+				case "goal_check": {
+					// Phase 2 で実装: checkGoals()
+					const { checkGoals } = await import("./goal-check.ts");
+					await checkGoals();
+					break;
+				}
+				default:
+					console.warn(`[frequent] Unknown task: ${task.id}`);
+			}
+
+			markTaskExecuted(heartbeat, task.id);
+			console.log(`[frequent] Completed task: ${task.id}`);
+		} catch (error) {
+			console.error(`[frequent] Error in task ${task.id}:`, error);
+		}
+	}
+}
+
+async function runInfrequentTasks(): Promise<void> {
+	if (isAgentBusy()) {
+		console.log("[infrequent] Skipped: agent is currently active");
+		return;
+	}
+
+	const heartbeat = loadHeartbeat();
+
+	for (const task of heartbeat.tasks) {
+		if (
+			!INFREQUENT_TASK_IDS.includes(
+				task.id as (typeof INFREQUENT_TASK_IDS)[number],
+			)
+		)
+			continue;
+		if (!shouldRunTask(task)) continue;
+
+		console.log(`[infrequent] Running task: ${task.id}`);
+
+		try {
+			switch (task.id) {
 				case "distill_memory":
 					await distillDailyMemory();
 					break;
@@ -117,15 +179,15 @@ async function runHeartbeatTasks(): Promise<void> {
 					await processDream();
 					break;
 				default:
-					console.warn(`[heartbeat] Unknown task: ${task.id}`);
+					console.warn(`[infrequent] Unknown task: ${task.id}`);
 			}
 
 			markTaskExecuted(heartbeat, task.id);
-			console.log(`[heartbeat] Completed task: ${task.id}`);
+			console.log(`[infrequent] Completed task: ${task.id}`);
 		} catch (error) {
-			console.error(`[heartbeat] Error in task ${task.id}:`, error);
+			console.error(`[infrequent] Error in task ${task.id}:`, error);
 		}
 	}
 }
 
-export { runHeartbeatTasks };
+export { runFrequentTasks, runInfrequentTasks };
