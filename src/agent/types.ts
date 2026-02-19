@@ -25,6 +25,16 @@ export interface GoalContext {
 	activeGoalsSummary: string;
 }
 
+/** ボイスチャットコンテキスト */
+export interface VoiceContext {
+	/** ボイスチャンネル名 */
+	voiceChannelName: string;
+	/** 参加中の人間メンバー名 */
+	participants: string[];
+	/** 直近のトランスクリプト */
+	recentTranscripts: { displayName: string; text: string }[];
+}
+
 /** エージェントループに渡すコンテキスト */
 export interface AgentContext {
 	/** トリガーとなったメッセージ（cron 経由の場合は undefined） */
@@ -34,7 +44,7 @@ export interface AgentContext {
 	/** 対象 Guild */
 	guild: Guild;
 	/** 起動トリガーの種別 */
-	triggeredBy: "triage" | "cron" | "reaction";
+	triggeredBy: "triage" | "cron" | "reaction" | "voice";
 	/** メンション（@haxxorbunny 等）による起動かどうか */
 	isMentioned?: boolean;
 	/** チャンネル巡回コンテキスト */
@@ -43,6 +53,8 @@ export interface AgentContext {
 	reactionContext?: ReactionContext;
 	/** ゴールチェックコンテキスト */
 	goalContext?: GoalContext;
+	/** ボイスチャットコンテキスト */
+	voiceContext?: VoiceContext;
 }
 
 /** ツール実行結果 */
