@@ -132,6 +132,15 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 			role: "user",
 			content: `[${ctx.triggerMessage.author.displayName}]: ${ctx.triggerMessage.content}`,
 		});
+		if (ctx.isMentioned) {
+			messages.push({
+				role: "system",
+				content:
+					"【重要】このメッセージはあなたへのメンション（直接の呼びかけ）です。" +
+					"指示・依頼・約束が含まれている場合は、必ず save_memory で記憶に保存してください（emotional_impact は 4 以上推奨）。" +
+					"既に覚えていることでも、改めて念押しされた場合は上書き保存してください。",
+			});
+		}
 	} else if (ctx.reactionContext) {
 		// リアクショントリガー
 		const dbMessages = getRecentMessages(ctx.channel.id, 5);

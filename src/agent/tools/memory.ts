@@ -19,7 +19,11 @@ const saveMemoryHandler: ToolHandler = async (args, ctx) => {
 	const entry = args.entry as string;
 	if (!entry) return fail("entry is required");
 	if (entry.length > 30) return fail("entry must be 30 characters or less");
-	const emotionalImpact = (args.emotional_impact as number | undefined) ?? 2;
+	let emotionalImpact = (args.emotional_impact as number | undefined) ?? 2;
+	// メンション由来の記憶は最低 impact=3（忘れにくくする）
+	if (ctx.isMentioned && emotionalImpact < 3) {
+		emotionalImpact = 3;
+	}
 	await appendMemoryEntry(ctx.guild.id, entry, emotionalImpact);
 	return ok(`Memory saved (impact=${emotionalImpact}): ${entry}`);
 };
