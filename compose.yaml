@@ -23,6 +23,24 @@ services:
       - ${HOME}/.gemini:/root/.gemini:ro
     restart: unless-stopped
 
+  voicevox:
+    image: voicevox/voicevox_engine:cpu-latest
+    container_name: haxxorbunny-voicevox
+    ports:
+      - "50021:50021"
+    restart: unless-stopped
+
+  whisper:
+    image: ghcr.io/ggml-org/whisper.cpp:main
+    container_name: haxxorbunny-whisper
+    ports:
+      - "8080:8080"
+    command: ["whisper-server", "--model", "/models/ggml-small.bin", "--port", "8080", "--host", "0.0.0.0"]
+    volumes:
+      - whisper-models:/models
+    restart: unless-stopped
+
 volumes:
   bot-data:
   aiclient-configs:
+  whisper-models:
