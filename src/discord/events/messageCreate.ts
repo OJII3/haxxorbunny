@@ -7,7 +7,7 @@ import { bufferMessage, setFlushHandler } from "../../llm/message-buffer.ts";
 import { loadPersonality } from "../../llm/prompts/personality.ts";
 import { reflect } from "../../llm/reflection.ts";
 import { triage } from "../../llm/triage.ts";
-import { shouldThrottle } from "../../llm/triage-throttle.ts";
+import { shouldSkipTriage } from "../../llm/triage-throttle.ts";
 
 function isMentioned(message: Message): boolean {
 	const botUser = client.user;
@@ -47,8 +47,8 @@ async function processBufferedMessages(
 		`[buffer] flushing ${messages.length} message(s) from ${authorName} in ${channelId}`,
 	);
 
-	// スロットル判定（メンション時はバイパス）
-	if (!hasMention && shouldThrottle(channelId)) {
+	// 統合ガード: チャンネルロック / 応答後クールダウン / スロットル
+	if (shouldSkipTriage(channelId, hasMention)) {
 		return;
 	}
 

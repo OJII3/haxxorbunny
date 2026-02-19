@@ -15,6 +15,11 @@ import {
 	personalityToPrompt,
 } from "../llm/prompts/personality.ts";
 import { SURFACE_PROMPT } from "../llm/prompts/system.ts";
+import {
+	lockChannel,
+	markChannelResponded,
+	unlockChannel,
+} from "../llm/triage-throttle.ts";
 import { getToolHandler, toolSpecs } from "./tools/index.ts";
 import type { AgentContext } from "./types.ts";
 
@@ -52,10 +57,14 @@ function buildConversationHistory(messages: Message[]): ConversationMessage[] {
 
 /** エージェントループ本体 */
 export async function runAgentLoop(ctx: AgentContext): Promise<void> {
+	const channelId = ctx.channel.id;
 	_agentBusy = true;
+	lockChannel(channelId);
 	try {
 		return await _runAgentLoopInner(ctx);
 	} finally {
+		unlockChannel(channelId);
+		markChannelResponded(channelId);
 		_agentBusy = false;
 	}
 }

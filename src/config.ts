@@ -24,7 +24,13 @@ export const config = {
 			"http://localhost:3000/v1",
 		apiKey: process.env.TRIAGE_API_KEY ?? process.env.LLM_API_KEY ?? "dummy",
 		model: process.env.TRIAGE_MODEL ?? "gemini-3-flash-preview",
-		throttleMs: Number(process.env.TRIAGE_THROTTLE_MS ?? "2000"),
+		throttleMs: Number(process.env.TRIAGE_THROTTLE_MS ?? "10000"),
+		responseCooldownMs: Number(
+			process.env.TRIAGE_RESPONSE_COOLDOWN_MS ?? "15000",
+		),
+		responseCooldownMentionMs: Number(
+			process.env.TRIAGE_RESPONSE_COOLDOWN_MENTION_MS ?? "5000",
+		),
 	},
 	messageBuffer: {
 		ms: Number(process.env.MESSAGE_BUFFER_MS ?? "3000"),
