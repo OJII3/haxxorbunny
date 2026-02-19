@@ -32,21 +32,24 @@ src/
 ├── config.ts             # 環境変数
 ├── agent/
 │   ├── types.ts          # AgentContext, ToolResult, ToolHandler 等の型定義
-│   ├── loop.ts           # エージェントループ本体
+│   ├── loop.ts           # エージェントループ本体 (MAX_ITERATIONS=10)
 │   └── tools/
 │       ├── index.ts      # ツールレジストリ（定義集約 + 名前→ハンドラ Map）
 │       ├── discord.ts    # Discord 操作ツール群
-│       └── memory.ts     # 記憶・人格更新ツール群
+│       ├── memory.ts     # 記憶・人格更新ツール群
+│       ├── goals.ts      # ゴール管理ツール群
+│       └── web.ts        # Web検索・URL取得ツール群
 ├── discord/
 │   ├── events/           # messageCreate, ready, messageReactionAdd
 │   └── register.ts       # イベント登録
 ├── llm/
 │   ├── client.ts         # メイン LLM OpenAI SDK ラッパー
 │   ├── triage-client.ts  # トリアージ LLM 専用クライアント
-│   ├── triage.ts         # トリアージ判定ロジック (ignore/engage 2択)
+│   ├── triage.ts         # トリアージ判定ロジック (mood連動の動的3段階方針)
 │   ├── triage-throttle.ts # チャンネルごとのスロットリング
 │   ├── reflection.ts     # triage後の軽量reflection (人格・記憶更新)
 │   ├── memory.ts         # 記憶管理 (load/save/append/toPrompt + 感情スコアリング)
+│   ├── goals.ts          # ゴール管理 (CRUD + goalsToPrompt)
 │   ├── heartbeat.ts      # 定期タスク管理 + アクティブ時間帯判定
 │   ├── distill.ts        # 記憶蒸留 (日次→長期)
 │   ├── dream.ts          # 夢処理 (記憶の連想分析・洞察生成)
@@ -56,8 +59,10 @@ src/
 │       ├── system.ts     # SURFACE_PROMPT (軽量要約) + SOUL_PROMPT (不変の本質) + IDENTITY_PROMPT (行動指針)
 │       └── personality.ts # 可変プロンプト (4次元気分ベクトル + personality.json)
 ├── scheduler/
-│   ├── index.ts          # cron スケジューラー
-│   └── cron.ts           # heartbeatタスク統合 (自主発言・蒸留・整理)
+│   ├── index.ts          # cron スケジューラー (3分 + 30分 の2系統)
+│   ├── cron.ts           # 高頻度/低頻度タスク分離実行
+│   ├── patrol.ts         # チャンネル巡回ロジック
+│   └── goal-check.ts     # ゴールチェック cronタスク
 └── db/
     ├── index.ts          # DB 接続
     ├── schema.ts         # Drizzle スキーマ
@@ -66,6 +71,7 @@ src/
 data/
 ├── personality.json      # SOUL: 可変プロンプト (bot が自己更新可能)
 ├── memory.json           # MEMORY: 長期記憶 (bot が自動更新)
+├── goals.json            # GOALS: ゴール管理 (bot が自己更新可能)
 ├── heartbeat.json        # HEARTBEAT: 定期タスク設定
 ├── memory/               # 日次記憶蒸留 (gitignore)
 │   └── YYYY-MM-DD.json
@@ -114,6 +120,22 @@ data/
 | `save_user_note` | `username`, `note` | ユーザーメモ保存 |
 | `update_personality` | `mood?`, `recent_topics?`, `interests?` | 性格設定更新（mood は4次元ベクトル） |
 
+**ゴール管理ツール:**
+
+| ツール名 | パラメータ | 説明 |
+|---------|-----------|------|
+| `set_goal` | `title`, `description`, `priority?` | 新しい目標を設定（最大5つ） |
+| `update_goal_progress` | `goal_id`, `note` | 目標の進捗メモを追加 |
+| `complete_goal` | `goal_id` | 目標を達成済みにする |
+| `list_goals` | (なし) | アクティブな目標一覧 |
+
+**Web検索・取得ツール:**
+
+| ツール名 | パラメータ | 説明 |
+|---------|-----------|------|
+| `web_search` | `query` | SearXNG API でWeb検索（上位5件） |
+| `fetch_url` | `url` | URLの内容を取得（HTML→テキスト変換、2000字制限） |
+
 ### トリアージ LLM レスポンス形式
 
 トリアージ LLM（高速モデル）は以下の JSON を返す:
@@ -126,12 +148,22 @@ data/
 }
 ```
 
+### mood 連動トリアージ
+
+トリアージの判定方針は `sociability + curiosity` の平均値で3段階に切り替わる:
+
+| 範囲 | 方針 | 説明 |
+|------|------|------|
+| `> 0.7` | 積極的 | 迷ったら engage。面白そうな話題にも参加 |
+| `> 0.4` | 普通 | メンション・直接質問・混乱整理のみ engage |
+| `≤ 0.4` | 控えめ | メンションのみに反応 |
+
 ### イベントフロー（エージェントループ）
 
 ```
 メッセージ受信 → DB保存 → Bot除外 → markActivity → デバウンスバッファ(3秒)
                                                     ↓ (追加メッセージなし or 15秒超過)
-                                       結合コンテンツ生成 → スロットル判定(*) → トリアージLLM(高速) → 判定
+                                       結合コンテンツ生成 → スロットル判定(*) → トリアージLLM(mood連動) → 判定
                                                            (* メンション時はスロットルをバイパス)
   トリアージ結果:
   ├─ ignore:  reflection LLM(flash, fire-and-forget) → personality + memory 更新
@@ -139,25 +171,45 @@ data/
        ├─ LLM に tools 定義 + SURFACE + personality + MEMORY + 会話履歴を送信 (軽量構成)
        ├─ tool_calls → 各ツール実行 → 結果を LLM に返す → ループ
        ├─ LLM が必要時に recall_identity ツールで SOUL + IDENTITY の詳細を参照
-       └─ finish_reason=stop → 終了（最大5イテレーション）+ typing インジケーター停止
+       └─ finish_reason=stop → 終了（最大10イテレーション）+ typing インジケーター停止
 
-cron (10分) → heartbeat タスクチェック → アクティブ時間帯判定
-  ├─ autonomous_post (10分): アクティブ時間内のみ → 重複チェック → エージェントループ
+リアクション受信 → Partial解決 → bot自身除外 → botメッセージのみ → クールダウン(30秒)
+  → mood.sociability < 0.3 ならスキップ
+  → エージェントループ起動 (triggeredBy: "reaction", reactionContext 付き)
+
+cron (3分) — 高頻度タスク（agentBusy のみチェック）
+  ├─ autonomous_post (15分): アクティブ時間内のみ → 自由行動プロンプト → エージェントループ
+  ├─ channel_patrol (5分): 全チャンネルスキャン → bot不在10分超のチャンネル → エージェントループ
+  └─ goal_check (30分): アクティブゴールあれば → ゴールコンテキスト付きエージェントループ
+
+cron (30分) — 低頻度タスク
   ├─ distill_memory (6時間): 蒸留LLM(flash) → 日次記憶集約 + 長期記憶更新
   ├─ cleanup_old_memory (24時間): 古い日次ファイルの整理
   └─ dream_processing (12時間): 夢処理LLM(flash) → 記憶連想分析 + 洞察生成
 ```
 
+### エージェントループのコンテキスト対応
+
+エージェントループは `triggeredBy` と付随するコンテキストに応じて異なるプロンプトを生成する:
+
+| トリガー | コンテキスト | プロンプト内容 |
+|---------|-------------|-------------|
+| `triage` | `triggerMessage` | 会話履歴 + トリガーメッセージ |
+| `reaction` | `reactionContext` | リアクション情報 + 「反応する？」 |
+| `cron` + `patrolContext` | `patrolContext` | チャンネルの会話 + 「反応したいことがあれば」 |
+| `cron` + `goalContext` | `goalContext` | ゴール情報 + 「アクションを取りたい？」 |
+| `cron` (デフォルト) | なし | 自由行動プロンプト（ゴール情報 + ツール案内） |
+
 - 同一ユーザーの連続メッセージ（追いメッセージ）はデバウンスバッファで蓄積し、最後のメッセージから3秒後にまとめて処理
 - メンションかどうかに関わらず、全メッセージがトリアージを通る統一フロー
 - メンション情報はトリアージのコンテキストとして渡され、判断材料として使われる
-- トリアージは控えめ方針。以下の場合のみ engage: メンション、会話の混乱整理、誤解防止、直接の質問
+- トリアージは mood 連動。sociability/curiosity が高いほど積極的に engage
 - ignore 時は reflection LLM が人格・記憶を更新（fire-and-forget）
 - engage 時はエージェントループが起動し、LLM がツールで自由に行動
 
 ### 人間らしさシステム
 
-- **アクティブ時間帯**: 8時〜翌2時（JST）のみ自主発言。深夜は活動休止
+- **アクティブ時間帯**: 8時〜翌2時（JST）のみ自主発言・チャンネル巡回。深夜は活動休止
 - **重複発言抑制**: SHA-256 + 冒頭50文字ハッシュで24時間キャッシュ。cron トリガー時のみチェック
 - **4次元気分ベクトル**: energy/positivity/sociability/curiosity (各0-1)。時間帯で energy 自動変動、急変防止の補間（70% new + 30% old）
 - **感情付き記憶**: MemoryEntry に emotional_impact (1-5) + created_at。エビングハウス忘却曲線（30日半減期）でスコアリング
@@ -165,6 +217,8 @@ cron (10分) → heartbeat タスクチェック → アクティブ時間帯判
 - **プロンプト階層化**: 軽量な SURFACE_PROMPT を毎回送信、詳細な SOUL_PROMPT + IDENTITY_PROMPT は recall_identity ツールでオンデマンド参照。トークン消費を ~1250t 削減
 - **メッセージデバウンス**: 同一 channelId:userId の連続メッセージを3秒（`MESSAGE_BUFFER_MS`）蓄積。最大15秒（`MESSAGE_BUFFER_MAX_MS`）で強制フラッシュ。結合コンテンツとしてトリアージに渡す
 - **自動 typing インジケーター**: エージェントループ中は5秒間隔で sendTyping() を呼び、Discord 上に「入力中…」を表示
+- **ゴール駆動行動**: bot が自分で目標を設定し、cron で定期的に進捗確認・アクション実行
+- **チャンネル巡回**: bot が不在のチャンネルを定期的にスキャンし、会話があれば参加を検討
 
 ### DB テーブル
 
@@ -213,7 +267,7 @@ podman-compose ps
 
 ### データ永続化
 
-- `bot-data` ボリューム → `/app/data`（SQLite DB, personality.json, memory.json, heartbeat.json, memory/）
+- `bot-data` ボリューム → `/app/data`（SQLite DB, personality.json, memory.json, goals.json, heartbeat.json, memory/）
 - `aiclient-configs` ボリューム → aiclient 設定
 
 ## コーディング規約

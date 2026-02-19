@@ -7,6 +7,7 @@ import {
 	saveMessage,
 } from "../db/queries.ts";
 import { llm } from "../llm/client.ts";
+import { goalsToPrompt } from "../llm/goals.ts";
 import { loadMemory, memoryToPrompt } from "../llm/memory.ts";
 import { isDuplicate, recordMessage } from "../llm/message-dedup.ts";
 import {
@@ -17,7 +18,7 @@ import { SURFACE_PROMPT } from "../llm/prompts/system.ts";
 import { getToolHandler, toolSpecs } from "./tools/index.ts";
 import type { AgentContext } from "./types.ts";
 
-const MAX_ITERATIONS = 5;
+const MAX_ITERATIONS = 10;
 
 let _agentBusy = false;
 export function isAgentBusy(): boolean {
@@ -100,7 +101,7 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 		name?: string;
 	}> = [{ role: "system", content: systemPrompt }];
 
-	if (ctx.triggerMessage) {
+	if (ctx.triggerMessage && ctx.triggeredBy === "triage") {
 		// メッセージトリガー: 直近の会話履歴 + トリガーメッセージ
 		const recentMessages = await ctx.triggerMessage.channel.messages.fetch({
 			limit: 20,
@@ -115,9 +116,44 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 			role: "user",
 			content: `[${ctx.triggerMessage.author.displayName}]: ${ctx.triggerMessage.content}`,
 		});
-	} else {
-		// cron トリガー: 自主発言コンテキスト
-		const dbMessages = getRecentMessages(ctx.channel.id, 10);
+	} else if (ctx.reactionContext) {
+		// リアクショントリガー
+		const dbMessages = getRecentMessages(ctx.channel.id, 5);
+		if (dbMessages.length > 0) {
+			const history = dbMessages
+				.map((m) => `[${m.username}]: ${m.content}`)
+				.join("\n");
+			messages.push({
+				role: "user",
+				content: `## 直近の会話\n${history}`,
+			});
+		}
+		messages.push({
+			role: "user",
+			content: `${ctx.reactionContext.userName} があなたのメッセージ「${ctx.reactionContext.messageContent}」に ${ctx.reactionContext.emoji} でリアクションしました。
+何か反応したいことがあればどうぞ。特になければ do_nothing を呼んでください。`,
+		});
+	} else if (ctx.patrolContext) {
+		// チャンネル巡回トリガー
+		const dbMessages = getRecentMessages(ctx.channel.id, 15);
+		if (dbMessages.length > 0) {
+			const history = dbMessages
+				.map((m) => `[${m.username}]: ${m.content}`)
+				.join("\n");
+			messages.push({
+				role: "user",
+				content: `## #${ctx.patrolContext.channelName} の直近の会話\n${history}`,
+			});
+		}
+		messages.push({
+			role: "user",
+			content: `あなたはこのチャンネル (#${ctx.patrolContext.channelName}) を ${ctx.patrolContext.minutesSinceLastBotMessage} 分間見ていませんでした。
+会話を読んで、反応したいことがあればどうぞ（コメント、リアクション、質問など）。
+特に言うことがなければ do_nothing を呼んでください。無理に会話に入る必要はありません。`,
+		});
+	} else if (ctx.goalContext) {
+		// ゴールチェックトリガー
+		const dbMessages = getRecentMessages(ctx.channel.id, 5);
 		if (dbMessages.length > 0) {
 			const history = dbMessages
 				.map((m) => `[${m.username}]: ${m.content}`)
@@ -131,8 +167,39 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 		messages.push({
 			role: "user",
 			content: `現在時刻: ${now.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}
-何か独り言を言いたいことはありますか？ times チャンネルに投稿するような軽い独り言を考えてください。
-特に言いたいことがなければ do_nothing ツールを呼んでください。`,
+
+${ctx.goalContext.activeGoalsSummary}
+
+目標に向けて何かアクションを取りたいですか？ web_search で情報を調べたり、send_message で誰かに聞いたり、update_goal_progress でメモを残したりできます。
+特にやることがなければ do_nothing を呼んでください。`,
+		});
+	} else {
+		// cron 自主発言トリガー（デフォルト）
+		const dbMessages = getRecentMessages(ctx.channel.id, 10);
+		if (dbMessages.length > 0) {
+			const history = dbMessages
+				.map((m) => `[${m.username}]: ${m.content}`)
+				.join("\n");
+			messages.push({
+				role: "user",
+				content: `## 直近の会話\n${history}`,
+			});
+		}
+
+		const goalsPrompt = goalsToPrompt();
+		const now = new Date();
+		messages.push({
+			role: "user",
+			content: `現在時刻: ${now.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}
+${goalsPrompt ? `\n${goalsPrompt}\n` : ""}
+自由行動タイム！やりたいことを選んでください:
+- 独り言を投稿する（times チャンネルに投稿するような軽い独り言）
+- web_search で気になることを調べる
+- list_channels で他のチャンネルを見に行く
+- 目標があれば進捗を確認・更新する
+- 特に何もなければ do_nothing
+
+何をしますか？`,
 		});
 	}
 

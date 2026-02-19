@@ -4,6 +4,7 @@ import type { AgentContext } from "../../agent/types.ts";
 import { client } from "../../client.ts";
 import { getRecentMessages, saveMessage } from "../../db/queries.ts";
 import { bufferMessage, setFlushHandler } from "../../llm/message-buffer.ts";
+import { loadPersonality } from "../../llm/prompts/personality.ts";
 import { reflect } from "../../llm/reflection.ts";
 import { triage } from "../../llm/triage.ts";
 import { shouldThrottle } from "../../llm/triage-throttle.ts";
@@ -52,11 +53,13 @@ async function processBufferedMessages(
 	}
 
 	try {
+		const personality = loadPersonality();
 		const triageResult = await triage(
 			channelId,
 			combinedContent,
 			authorName,
 			hasMention,
+			personality.mood,
 		);
 
 		console.log(
