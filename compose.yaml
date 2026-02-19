@@ -34,8 +34,15 @@ services:
     image: ghcr.io/ggml-org/whisper.cpp:main
     container_name: haxxorbunny-whisper
     ports:
-      - "8080:8080"
-    command: ["whisper-server", "--model", "/models/ggml-small.bin", "--port", "8080", "--host", "0.0.0.0"]
+      - "8090:8090"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        if [ ! -f /models/ggml-small.bin ]; then
+          echo "[whisper] Downloading ggml-small.bin..."
+          wget -O /models/ggml-small.bin "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin"
+        fi
+        exec whisper-server --model /models/ggml-small.bin --port 8090 --host 0.0.0.0
     volumes:
       - whisper-models:/models
     restart: unless-stopped

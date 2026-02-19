@@ -317,9 +317,15 @@ ${goalsPrompt ? `\n${goalsPrompt}\n` : ""}
 		});
 
 		// ツール呼び出しがなければ、テキストを send_message で送信（reply ではなく）
+		// voice モード時はフォールバック送信しない（voice_reply ツール経由で話すべき）
 		if (functionToolCalls.length === 0) {
 			const textContent = assistantMessage.content?.trim();
-			if (textContent && !messageSent && ctx.channel.isSendable()) {
+			if (
+				textContent &&
+				!messageSent &&
+				!isVoiceMode &&
+				ctx.channel.isSendable()
+			) {
 				// cron トリガー時は重複チェック
 				if (ctx.triggeredBy === "cron" && isDuplicate(guildId, textContent)) {
 					console.log(

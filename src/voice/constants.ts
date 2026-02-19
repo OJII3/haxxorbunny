@@ -4,7 +4,7 @@ export const SAMPLE_RATE = 48000;
 /** モノラル */
 export const CHANNELS = 1;
 
-/** PCM 16-bit のバイト深度 */
+/** PCM 16-bit のビット深度 */
 export const BIT_DEPTH = 16;
 
 /** VAD: 発話終了と判定する無音継続時間 (ms) */

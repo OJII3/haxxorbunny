@@ -14,10 +14,12 @@ const allTools: ToolDefinition[] = [
 	...voiceTools,
 ];
 
-/** OpenAI API に渡す tools 定義配列 */
-export const toolSpecs: ChatCompletionFunctionTool[] = allTools.map(
-	(t) => t.spec,
-);
+/** 通常モード（テキスト）で使用する tools 定義（voice ツールを除外） */
+const VOICE_TOOL_NAMES = new Set(voiceTools.map((t) => t.spec.function.name));
+
+export const toolSpecs: ChatCompletionFunctionTool[] = allTools
+	.filter((t) => !VOICE_TOOL_NAMES.has(t.spec.function.name))
+	.map((t) => t.spec);
 
 /** voice モードで使用可能なツール名 */
 const VOICE_ALLOWED_TOOLS = new Set([
@@ -35,7 +37,7 @@ export const voiceToolSpecs: ChatCompletionFunctionTool[] = allTools
 	.filter((t) => VOICE_ALLOWED_TOOLS.has(t.spec.function.name))
 	.map((t) => t.spec);
 
-/** ツール名 → ハンドラの Map */
+/** ツール名 → ハンドラの Map（全ツール対応） */
 const handlerMap = new Map<string, ToolHandler>(
 	allTools.map((t) => [t.spec.function.name, t.handler]),
 );

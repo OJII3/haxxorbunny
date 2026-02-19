@@ -1,3 +1,4 @@
+import type { Readable } from "node:stream";
 import type { VoiceConnection } from "@discordjs/voice";
 import { EndBehaviorType } from "@discordjs/voice";
 import OpusScript from "opusscript";
@@ -36,6 +37,7 @@ export class VoiceReceiverHandler {
 			silenceTimer: ReturnType<typeof setTimeout> | null;
 		}
 	>();
+	private readonly opusStreams = new Map<string, Readable>();
 	private subscribedUsers = new Set<string>();
 	private destroyed = false;
 
@@ -56,6 +58,8 @@ export class VoiceReceiverHandler {
 			end: { behavior: EndBehaviorType.Manual },
 		});
 
+		this.opusStreams.set(userId, opusStream);
+
 		opusStream.on("data", (packet: Buffer) => {
 			if (this.destroyed) return;
 			this.handleOpusPacket(userId, packet);
@@ -71,6 +75,13 @@ export class VoiceReceiverHandler {
 	/** 特定ユーザーの音声受信を停止する */
 	unsubscribeUser(userId: string): void {
 		this.subscribedUsers.delete(userId);
+
+		const stream = this.opusStreams.get(userId);
+		if (stream) {
+			stream.destroy();
+			this.opusStreams.delete(userId);
+		}
+
 		const state = this.userBuffers.get(userId);
 		if (state?.silenceTimer) {
 			clearTimeout(state.silenceTimer);
@@ -159,12 +170,19 @@ export class VoiceReceiverHandler {
 	/** すべてのリソースを解放する */
 	destroy(): void {
 		this.destroyed = true;
-		for (const [userId, state] of this.userBuffers) {
+
+		for (const [, state] of this.userBuffers) {
 			if (state.silenceTimer) {
 				clearTimeout(state.silenceTimer);
 			}
-			this.userBuffers.delete(userId);
 		}
+		this.userBuffers.clear();
+
+		for (const [, stream] of this.opusStreams) {
+			stream.destroy();
+		}
+		this.opusStreams.clear();
+
 		this.subscribedUsers.clear();
 		this.decoder.delete();
 	}

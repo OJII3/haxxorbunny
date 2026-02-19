@@ -19,7 +19,7 @@ export async function textToSpeech(text: string): Promise<Buffer> {
 		);
 	}
 
-	const audioQuery = await queryRes.json();
+	const audioQuery = (await queryRes.json()) as Record<string, unknown>;
 
 	// Step 2: synthesis で音声合成
 	const synthRes = await fetch(
