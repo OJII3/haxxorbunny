@@ -30,6 +30,25 @@ export function runMigrations() {
 		)
 	`);
 
+	// guildId カラム追加マイグレーション
+	try {
+		sqlite.run(
+			`ALTER TABLE messages ADD COLUMN guild_id TEXT NOT NULL DEFAULT ''`,
+		);
+		console.log("[db] Added guild_id column to messages");
+	} catch {
+		// duplicate column — already migrated
+	}
+
+	try {
+		sqlite.run(
+			`ALTER TABLE bot_actions ADD COLUMN guild_id TEXT NOT NULL DEFAULT ''`,
+		);
+		console.log("[db] Added guild_id column to bot_actions");
+	} catch {
+		// duplicate column — already migrated
+	}
+
 	sqlite.close();
 	console.log("[db] Migrations complete");
 }

@@ -15,20 +15,20 @@ function fail(result: string): ToolResult {
 	return { success: false, result };
 }
 
-const saveMemoryHandler: ToolHandler = async (args) => {
+const saveMemoryHandler: ToolHandler = async (args, ctx) => {
 	const entry = args.entry as string;
 	if (!entry) return fail("entry is required");
 	if (entry.length > 30) return fail("entry must be 30 characters or less");
 	const emotionalImpact = (args.emotional_impact as number | undefined) ?? 2;
-	await appendMemoryEntry(entry, emotionalImpact);
+	await appendMemoryEntry(ctx.guild.id, entry, emotionalImpact);
 	return ok(`Memory saved (impact=${emotionalImpact}): ${entry}`);
 };
 
-const saveUserNoteHandler: ToolHandler = async (args) => {
+const saveUserNoteHandler: ToolHandler = async (args, ctx) => {
 	const username = args.username as string;
 	const note = args.note as string;
 	if (!username || !note) return fail("username and note are required");
-	await addUserNote(username, note);
+	await addUserNote(ctx.guild.id, username, note);
 	return ok(`User note saved for ${username}: ${note}`);
 };
 
@@ -36,7 +36,7 @@ const recallIdentityHandler: ToolHandler = async () => {
 	return ok(`${SOUL_PROMPT}\n\n${IDENTITY_PROMPT}`);
 };
 
-const updatePersonalityHandler: ToolHandler = async (args) => {
+const updatePersonalityHandler: ToolHandler = async (args, ctx) => {
 	const partial: Partial<
 		Pick<Personality, "mood" | "recent_topics" | "interests">
 	> = {};
@@ -63,7 +63,7 @@ const updatePersonalityHandler: ToolHandler = async (args) => {
 			"At least one field (mood, recent_topics, interests) is required",
 		);
 
-	updatePersonality(partial);
+	updatePersonality(ctx.guild.id, partial);
 	console.log("[agent/personality] Updated:", partial);
 	return ok(`Personality updated: ${JSON.stringify(partial)}`);
 };

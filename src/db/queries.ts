@@ -1,8 +1,9 @@
-import { count, desc, eq, gt, sql } from "drizzle-orm";
+import { and, count, desc, eq, gt, sql } from "drizzle-orm";
 import { db } from "./index.ts";
 import { botActions, messages } from "./schema.ts";
 
 export function saveMessage(data: {
+	guildId?: string;
 	channelId: string;
 	userId: string;
 	username: string;
@@ -11,7 +12,15 @@ export function saveMessage(data: {
 }) {
 	return db
 		.insert(messages)
-		.values({ ...data, createdAt: new Date() })
+		.values({
+			guildId: data.guildId ?? "",
+			channelId: data.channelId,
+			userId: data.userId,
+			username: data.username,
+			content: data.content,
+			isBot: data.isBot,
+			createdAt: new Date(),
+		})
 		.run();
 }
 
@@ -27,6 +36,7 @@ export function getRecentMessages(channelId: string, limit = 20) {
 }
 
 export function saveBotAction(data: {
+	guildId?: string;
 	action: string;
 	channelId?: string | null;
 	content?: string | null;
@@ -35,7 +45,15 @@ export function saveBotAction(data: {
 }) {
 	return db
 		.insert(botActions)
-		.values({ ...data, createdAt: new Date() })
+		.values({
+			guildId: data.guildId ?? "",
+			action: data.action,
+			channelId: data.channelId,
+			content: data.content,
+			reasoning: data.reasoning,
+			triggeredBy: data.triggeredBy,
+			createdAt: new Date(),
+		})
 		.run();
 }
 
@@ -51,12 +69,16 @@ export function getLastBotAction(channelId: string) {
 	);
 }
 
-export function getActiveChannelIds(limit = 5): string[] {
+export function getActiveChannelIds(guildId?: string, limit = 5): string[] {
 	const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+	const conditions = [gt(messages.createdAt, since)];
+	if (guildId) {
+		conditions.push(eq(messages.guildId, guildId));
+	}
 	const rows = db
 		.select({ channelId: messages.channelId, cnt: count() })
 		.from(messages)
-		.where(gt(messages.createdAt, since))
+		.where(and(...conditions))
 		.groupBy(messages.channelId)
 		.orderBy(sql`count(*) desc`)
 		.limit(limit)

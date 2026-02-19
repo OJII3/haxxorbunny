@@ -14,14 +14,14 @@ function fail(result: string): ToolResult {
 	return { success: false, result };
 }
 
-const setGoalHandler: ToolHandler = async (args) => {
+const setGoalHandler: ToolHandler = async (args, ctx) => {
 	const title = args.title as string;
 	const description = args.description as string;
 	const priority = (args.priority as "low" | "medium" | "high") ?? "medium";
 
 	if (!title || !description) return fail("title and description are required");
 
-	const goal = addGoal(title, description, priority);
+	const goal = addGoal(ctx.guild.id, title, description, priority);
 	if (!goal)
 		return fail(
 			"Maximum active goals (5) reached. Complete or abandon a goal first.",
@@ -32,30 +32,30 @@ const setGoalHandler: ToolHandler = async (args) => {
 	);
 };
 
-const updateGoalProgressHandler: ToolHandler = async (args) => {
+const updateGoalProgressHandler: ToolHandler = async (args, ctx) => {
 	const goalId = args.goal_id as string;
 	const note = args.note as string;
 
 	if (!goalId || !note) return fail("goal_id and note are required");
 
-	const success = updateGoalProgress(goalId, note);
+	const success = updateGoalProgress(ctx.guild.id, goalId, note);
 	if (!success) return fail(`Goal not found or not active: ${goalId}`);
 
 	return ok(`Progress updated for ${goalId}: ${note}`);
 };
 
-const completeGoalHandler: ToolHandler = async (args) => {
+const completeGoalHandler: ToolHandler = async (args, ctx) => {
 	const goalId = args.goal_id as string;
 	if (!goalId) return fail("goal_id is required");
 
-	const success = completeGoal(goalId);
+	const success = completeGoal(ctx.guild.id, goalId);
 	if (!success) return fail(`Goal not found or not active: ${goalId}`);
 
 	return ok(`Goal completed: ${goalId}`);
 };
 
-const listGoalsHandler: ToolHandler = async () => {
-	const active = getActiveGoals();
+const listGoalsHandler: ToolHandler = async (_args, ctx) => {
+	const active = getActiveGoals(ctx.guild.id);
 	if (active.length === 0) return ok("No active goals.");
 
 	const list = active

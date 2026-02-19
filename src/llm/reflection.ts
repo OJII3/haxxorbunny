@@ -43,6 +43,7 @@ const REFLECTION_SYSTEM_PROMPT = `
 `.trim();
 
 export async function reflect(
+	guildId: string,
 	channelId: string,
 	messageContent: string,
 	authorName: string,
@@ -114,13 +115,13 @@ ${conversationContext || "(なし)"}
 			if (result.personality_update.interests) {
 				update.interests = result.personality_update.interests;
 			}
-			updatePersonality(update);
+			updatePersonality(guildId, update);
 			console.log("[reflection/personality] Updated:", update);
 		}
 
 		if (result.memory_entry) {
 			// reflection 由来の記憶はやや低め (impact=2)
-			appendMemoryEntry(result.memory_entry, 2);
+			appendMemoryEntry(guildId, result.memory_entry, 2);
 			console.log("[reflection/memory] Added:", result.memory_entry);
 		}
 

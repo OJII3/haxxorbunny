@@ -4,7 +4,7 @@ import type {
 	PartialUser,
 	User,
 } from "discord.js";
-import { isAgentBusy, runAgentLoop } from "../../agent/loop.ts";
+import { isAgentBusyForGuild, runAgentLoop } from "../../agent/loop.ts";
 import type { AgentContext } from "../../agent/types.ts";
 import { client } from "../../client.ts";
 import { loadPersonality } from "../../llm/prompts/personality.ts";
@@ -44,11 +44,14 @@ export async function handleMessageReactionAdd(
 	// bot のメッセージへのリアクションのみ反応
 	if (reaction.message.author?.id !== botUser.id) return;
 
+	const guild = reaction.message.guild;
+	if (!guild) return;
+
 	// エージェントがビジーなら無視
-	if (isAgentBusy()) return;
+	if (isAgentBusyForGuild(guild.id)) return;
 
 	// mood.sociability が低い場合はスキップ
-	const personality = loadPersonality();
+	const personality = loadPersonality(guild.id);
 	if (personality.mood.sociability < 0.3) {
 		console.log("[reaction] Skipped: sociability too low");
 		return;
@@ -72,9 +75,6 @@ export async function handleMessageReactionAdd(
 			}
 		}
 	}
-
-	const guild = reaction.message.guild;
-	if (!guild) return;
 
 	const emoji = reaction.emoji.name ?? reaction.emoji.toString();
 	const reactorName =

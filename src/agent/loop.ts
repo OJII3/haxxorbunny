@@ -25,9 +25,14 @@ import type { AgentContext } from "./types.ts";
 
 const MAX_ITERATIONS = 10;
 
-let _agentBusy = false;
+const _agentBusyMap = new Map<string, boolean>();
+
 export function isAgentBusy(): boolean {
-	return _agentBusy;
+	return [..._agentBusyMap.values()].some(Boolean);
+}
+
+export function isAgentBusyForGuild(guildId: string): boolean {
+	return _agentBusyMap.get(guildId) === true;
 }
 
 let _lastActivityAt = 0;
@@ -58,14 +63,15 @@ function buildConversationHistory(messages: Message[]): ConversationMessage[] {
 /** エージェントループ本体 */
 export async function runAgentLoop(ctx: AgentContext): Promise<void> {
 	const channelId = ctx.channel.id;
-	_agentBusy = true;
+	const guildId = ctx.guild.id;
+	_agentBusyMap.set(guildId, true);
 	lockChannel(channelId);
 	try {
 		return await _runAgentLoopInner(ctx);
 	} finally {
 		unlockChannel(channelId);
 		markChannelResponded(channelId);
-		_agentBusy = false;
+		_agentBusyMap.set(guildId, false);
 	}
 }
 
@@ -89,9 +95,10 @@ async function _runAgentLoopInner(ctx: AgentContext): Promise<void> {
 }
 
 async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
-	const personality = loadPersonality();
+	const guildId = ctx.guild.id;
+	const personality = loadPersonality(guildId);
 	const personalityPrompt = personalityToPrompt(personality);
-	const memory = loadMemory();
+	const memory = loadMemory(guildId);
 	const memoryPrompt = memoryToPrompt(memory);
 
 	// 軽量構成: SURFACE → personality → memory (詳細は recall_identity ツールで参照)
@@ -195,7 +202,7 @@ ${ctx.goalContext.activeGoalsSummary}
 			});
 		}
 
-		const goalsPrompt = goalsToPrompt();
+		const goalsPrompt = goalsToPrompt(guildId);
 		const now = new Date();
 		messages.push({
 			role: "user",
@@ -273,7 +280,7 @@ ${goalsPrompt ? `\n${goalsPrompt}\n` : ""}
 			const textContent = assistantMessage.content?.trim();
 			if (textContent && !messageSent && ctx.channel.isSendable()) {
 				// cron トリガー時は重複チェック
-				if (ctx.triggeredBy === "cron" && isDuplicate(textContent)) {
+				if (ctx.triggeredBy === "cron" && isDuplicate(guildId, textContent)) {
 					console.log(
 						"[agent] Fallback blocked by dedup:",
 						textContent.slice(0, 50),
@@ -285,8 +292,9 @@ ${goalsPrompt ? `\n${goalsPrompt}\n` : ""}
 					);
 					try {
 						await ctx.channel.send(textContent);
-						recordMessage(textContent);
+						recordMessage(guildId, textContent);
 						saveMessage({
+							guildId,
 							channelId: ctx.channel.id,
 							userId: client.user?.id ?? "bot",
 							username: "haxxorbunny",
@@ -371,6 +379,7 @@ ${goalsPrompt ? `\n${goalsPrompt}\n` : ""}
 	const toolsSummary =
 		executedTools.length > 0 ? executedTools.join(",") : "none";
 	saveBotAction({
+		guildId,
 		action: `agent:${toolsSummary}`,
 		channelId: ctx.channel.id,
 		content: null,

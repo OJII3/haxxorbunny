@@ -2,6 +2,7 @@ import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const messages = sqliteTable("messages", {
 	id: integer("id").primaryKey({ autoIncrement: true }),
+	guildId: text("guild_id").notNull().default(""),
 	channelId: text("channel_id").notNull(),
 	userId: text("user_id").notNull(),
 	username: text("username").notNull(),
@@ -12,6 +13,7 @@ export const messages = sqliteTable("messages", {
 
 export const botActions = sqliteTable("bot_actions", {
 	id: integer("id").primaryKey({ autoIncrement: true }),
+	guildId: text("guild_id").notNull().default(""),
 	action: text("action").notNull(),
 	channelId: text("channel_id"),
 	content: text("content"),
