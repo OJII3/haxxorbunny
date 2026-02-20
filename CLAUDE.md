@@ -333,6 +333,7 @@ podman-compose ps
 |---------|-----------|------|
 | bot | haxxorbunny | Discord bot 本体 (Bun) |
 | aiclient | haxxorbunny-aiclient | LLM API (aiclient-2-api, Gemini) |
+| searxng | haxxorbunny-searxng | Web検索エンジン (SearXNG) |
 | voicevox | haxxorbunny-voicevox | TTS Engine (VOICEVOX, CPU) |
 | whisper | haxxorbunny-whisper | STT Server (whisper.cpp, small model) |
 
