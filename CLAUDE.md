@@ -43,6 +43,7 @@ src/
 │       ├── discord.ts    # Discord 操作ツール群
 │       ├── memory.ts     # 記憶・人格更新ツール群
 │       ├── goals.ts      # ゴール管理ツール群
+│       ├── heartbeat.ts  # スケジュール管理ツール群 (独り言の頻度調整)
 │       ├── web.ts        # Web検索・URL取得ツール群
 │       └── voice.ts      # ボイスチャットツール群 (voice_reply, leave_voice)
 ├── voice/
@@ -161,6 +162,13 @@ scripts/
 | `voice_reply` | `content` | ボイスチャンネルで音声として返答（TTS再生、50文字以内推奨） |
 | `leave_voice` | (なし) | ボイスチャンネルから退出する |
 
+**スケジュール管理ツール:**
+
+| ツール名 | パラメータ | 説明 |
+|---------|-----------|------|
+| `get_posting_schedule` | (なし) | 独り言の現在の設定（enabled, interval_minutes）を返す |
+| `update_posting_schedule` | `enabled?`, `interval_minutes?` | 独り言の頻度を変更。interval は 15〜1440 分の範囲 |
+
 ### トリアージ LLM レスポンス形式
 
 トリアージ LLM（高速モデル）は以下の JSON を返す:
@@ -253,6 +261,7 @@ cron (2時間) — 低頻度タスク
 - **ゴール駆動行動**: bot が自分で目標を設定し、cron で定期的に進捗確認・アクション実行
 - **チャンネル巡回**: bot が不在のチャンネルを定期的にスキャンし、会話があれば参加を検討
 - **メンション記憶強化**: メンション（直接の呼びかけ）による指示・依頼は忘れにくくする。AgentContext に `isMentioned` を伝播し、①システムプロンプトで save_memory を促す、②emotional_impact の最低値を 3 にフロアリング。30日後のスコアが impact=2 の ~0.425 → impact=3 の ~0.500 以上に改善
+- **自律的スケジュール調整**: bot が `get_posting_schedule` / `update_posting_schedule` ツールで独り言（autonomous_post）の頻度を自分で調整可能。気分や状況に応じて有効/無効の切り替えや間隔（15〜1440分）の変更ができる
 
 ### ギルドごとのデータ分離
 

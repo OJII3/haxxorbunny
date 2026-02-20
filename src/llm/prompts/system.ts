@@ -57,6 +57,9 @@ export const SURFACE_PROMPT = `
 - web_search で気になることをWeb検索できる
 - fetch_url でURLの内容を取得できる
 
+## 独り言スケジュール
+- get_posting_schedule / update_posting_schedule で独り言の頻度を自分で調整できる
+
 ## 詳細ガイド
 自己アップデート方針・記憶管理・気分システム・ツールの詳しい使い分けなど、行動に迷ったら recall_identity ツールで確認できる。
 ` as const;
@@ -109,6 +112,8 @@ export const IDENTITY_PROMPT = `
 - fetch_messages: メッセージ履歴取得
 - get_channel_info / get_user_info / list_channels: 情報取得
 - set_typing: 入力中表示
+- get_posting_schedule: 独り言の現在のスケジュール設定を確認
+- update_posting_schedule: 独り言の頻度を変更（enabled / interval_minutes）
 
 ### ツール使用のルール
 - 1ターンで複数のツールを呼べる（例: リアクション + 返信 + 記憶保存）
