@@ -210,14 +210,14 @@ VC参加リクエスト（メンション + キーワード）
   → エージェントループ起動 (triggeredBy: "reaction", reactionContext 付き)
 
 cron (13分) — 高頻度タスク（agentBusy のみチェック）
-  ├─ autonomous_post (15分): アクティブ時間内のみ → 自由行動プロンプト → エージェントループ
-  ├─ channel_patrol (5分): 全チャンネルスキャン → bot不在10分超のチャンネル → エージェントループ
-  └─ goal_check (30分): アクティブゴールあれば → ゴールコンテキスト付きエージェントループ
+  ├─ autonomous_post (60分, disabled): アクティブ時間内のみ → 自由行動プロンプト → エージェントループ
+  ├─ channel_patrol (30分): 全チャンネルスキャン → bot不在10分超のチャンネル → エージェントループ
+  └─ goal_check (120分): アクティブゴールあれば → ゴールコンテキスト付きエージェントループ
 
 cron (2時間) — 低頻度タスク
-  ├─ distill_memory (6時間): 蒸留LLM(flash) → 日次記憶集約 + 長期記憶更新
+  ├─ distill_memory (12時間): 蒸留LLM(flash) → 日次記憶集約 + 長期記憶更新
   ├─ cleanup_old_memory (24時間): 古い日次ファイルの整理
-  └─ dream_processing (12時間): 夢処理LLM(flash) → 記憶連想分析 + 洞察生成
+  └─ dream_processing (24時間): 夢処理LLM(flash) → 記憶連想分析 + 洞察生成
 ```
 
 ### エージェントループのコンテキスト対応
@@ -246,7 +246,7 @@ cron (2時間) — 低頻度タスク
 - **重複発言抑制**: SHA-256 + 冒頭50文字ハッシュで24時間キャッシュ。cron トリガー時のみチェック
 - **4次元気分ベクトル**: energy/positivity/sociability/curiosity (各0-1)。時間帯で energy 自動変動、急変防止の補間（70% new + 30% old）
 - **感情付き記憶**: MemoryEntry に emotional_impact (1-5) + created_at。エビングハウス忘却曲線（30日半減期）でスコアリング
-- **夢処理**: 12時間ごとに記憶を連想分析。洞察を [dream] タグ付き記憶として追加、不要記憶を整理
+- **夢処理**: 24時間ごとに記憶を連想分析。洞察を [dream] タグ付き記憶として追加、不要記憶を整理
 - **プロンプト階層化**: 軽量な SURFACE_PROMPT を毎回送信、詳細な SOUL_PROMPT + IDENTITY_PROMPT は recall_identity ツールでオンデマンド参照。トークン消費を ~1250t 削減
 - **メッセージデバウンス**: 同一 channelId:userId の連続メッセージを3秒（`MESSAGE_BUFFER_MS`）蓄積。最大15秒（`MESSAGE_BUFFER_MAX_MS`）で強制フラッシュ。結合コンテンツとしてトリアージに渡す
 - **自動 typing インジケーター**: エージェントループ中は5秒間隔で sendTyping() を呼び、Discord 上に「入力中…」を表示
