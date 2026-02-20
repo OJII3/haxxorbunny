@@ -68,12 +68,13 @@ export class VoiceSession {
 	async start(): Promise<void> {
 		this.startedAt = Date.now();
 
-		// VC 接続
+		// VC 接続（DAVE E2EE は Bun の NAPI 互換性問題により無効化）
 		this.connection = joinVoiceChannel({
 			channelId: this.voiceChannel.id,
 			guildId: this.guildId,
 			adapterCreator: this.guild.voiceAdapterCreator,
 			selfDeaf: false, // 受信するために deaf を解除
+			daveEncryption: false,
 		});
 
 		// Ready 状態を待つ
