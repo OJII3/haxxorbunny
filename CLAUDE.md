@@ -24,11 +24,16 @@ Discord に住む自律的エージェント bot。LLM (aiclient-2-api 経由 Ge
 - `nr lint:fix` — Lint 自動修正 (`biome check --write .`)
 - `nr db:generate` — Drizzle マイグレーション生成
 - `nr db:migrate` — Drizzle マイグレーション実行
-- `bun test` — テスト実行
-
 ## ディレクトリ構成
 
 ```
+├── biome.json            # Biome linter/formatter 設定
+├── compose.yaml          # Podman Compose 設定
+├── Containerfile         # コンテナイメージビルド定義
+├── drizzle.config.ts     # Drizzle ORM マイグレーション設定
+├── flake.nix             # Nix Flake 開発環境定義
+├── package.json          # 依存関係 + npm scripts
+├── tsconfig.json         # TypeScript コンパイラ設定
 src/
 ├── index.ts              # エントリポイント
 ├── client.ts             # Discord Client (GuildMembers intent 含む)
@@ -85,7 +90,10 @@ src/
     └── queries.ts        # クエリヘルパー
 data/
 ├── heartbeat.json        # HEARTBEAT: グローバル定期タスク設定
-├── guilds/               # ギルドごとのデータ (自動作成)
+├── personality.json      # デフォルト/レガシー (ギルド移行前)
+├── memory.json           # デフォルト/レガシー (ギルド移行前)
+├── goals.json            # デフォルト/レガシー (ギルド移行前)
+├── guilds/               # ギルドごとのデータ (移行後に自動作成)
 │   └── {guildId}/
 │       ├── personality.json  # SOUL: 可変プロンプト (bot が自己更新可能)
 │       ├── memory.json       # MEMORY: 長期記憶 (bot が自動更新)
