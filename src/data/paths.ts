@@ -30,3 +30,19 @@ export function guildDailyMemoryDir(guildId: string): string {
 	}
 	return dir;
 }
+
+export function avatarDir(): string {
+	const dir = join(DATA_DIR, "avatars");
+	if (!existsSync(dir)) {
+		mkdirSync(dir, { recursive: true });
+	}
+	return dir;
+}
+
+export function avatarManifestPath(): string {
+	return join(avatarDir(), "manifest.json");
+}
+
+export function avatarStatePath(): string {
+	return join(DATA_DIR, "avatar-state.json");
+}

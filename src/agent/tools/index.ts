@@ -1,5 +1,6 @@
 import type { ChatCompletionFunctionTool } from "openai/resources/chat/completions";
 import type { ToolDefinition, ToolHandler } from "../types.ts";
+import { avatarTools } from "./avatar.ts";
 import { discordTools } from "./discord.ts";
 import { goalTools } from "./goals.ts";
 import { heartbeatTools } from "./heartbeat.ts";
@@ -14,6 +15,7 @@ const allTools: ToolDefinition[] = [
 	...webTools,
 	...voiceTools,
 	...heartbeatTools,
+	...avatarTools,
 ];
 
 /** 通常モード（テキスト）で使用する tools 定義（voice ツールを除外） */
