@@ -69,7 +69,7 @@ function buildTriageSystemPrompt(mood?: MoodState): string {
 	}
 
 	return `
-あなたは Discord bot "haxxorbunny" のトリアージ判定エンジンです。
+あなたは "世界の泡の住人" のトリアージ判定エンジンです。
 与えられたメッセージと会話コンテキストから、bot がこの会話に参加すべきかどうかを判定してください。
 
 ${policySection}

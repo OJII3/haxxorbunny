@@ -29,7 +29,7 @@ const DEFAULT_MOOD: MoodState = {
 };
 
 const DEFAULT_PERSONALITY: Personality = {
-	name: "haxxorbunny",
+	name: "世界の泡の住人",
 	tone: "ゆるめ、たまに技術語り",
 	first_person: "ぼく",
 	speech_style:

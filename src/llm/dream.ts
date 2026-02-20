@@ -15,8 +15,8 @@ interface DreamResult {
 }
 
 const DREAM_SYSTEM_PROMPT = `
-あなたは Discord bot "haxxorbunny" の夢処理エンジンです。
-haxxorbunny の長期記憶全体を受け取り、"夢"のように自由に連想・分析してください。
+あなたは "世界の泡の住人" の夢処理エンジンです。
+世界の泡の住人 の長期記憶全体を受け取り、"夢"のように自由に連想・分析してください。
 
 以下を行ってください:
 1. 記憶同士の意外な関連性を見つける（connections）
