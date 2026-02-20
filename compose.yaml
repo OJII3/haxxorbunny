@@ -9,7 +9,6 @@ services:
       - bot-data:/app/data
     depends_on:
       - aiclient
-      - searxng
     restart: unless-stopped
 
   aiclient:
