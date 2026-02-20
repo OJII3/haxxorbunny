@@ -39,4 +39,12 @@ export const config = {
 	search: {
 		endpoint: process.env.SEARXNG_URL ?? "",
 	},
+	voice: {
+		whisperUrl: process.env.WHISPER_URL ?? "http://localhost:8090",
+		voicevoxUrl: process.env.VOICEVOX_URL ?? "http://localhost:50021",
+		voicevoxSpeaker: Number(process.env.VOICEVOX_SPEAKER ?? "1"),
+		silenceTimeoutMs: Number(process.env.VOICE_SILENCE_TIMEOUT_MS ?? "300000"),
+		vadThreshold: Number(process.env.VOICE_VAD_THRESHOLD ?? "500"),
+		maxSessionMs: Number(process.env.VOICE_MAX_SESSION_MS ?? "600000"),
+	},
 } as const;

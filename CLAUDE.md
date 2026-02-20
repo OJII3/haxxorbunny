@@ -8,6 +8,9 @@ Discord に住む自律的エージェント bot。LLM (aiclient-2-api 経由 Ge
 - 言語: TypeScript (strict)
 - Discord: discord.js v14
 - LLM: OpenAI SDK → aiclient-2-api (OpenAI 互換エンドポイント)
+- Voice: @discordjs/voice + opusscript (純JS Opus)
+- STT: whisper.cpp サーバー (Docker)
+- TTS: VOICEVOX Engine (Docker)
 - DB: SQLite (bun:sqlite + Drizzle ORM)
 - Linter/Formatter: Biome
 - デプロイ: Podman Compose
@@ -40,9 +43,18 @@ src/
 │       ├── discord.ts    # Discord 操作ツール群
 │       ├── memory.ts     # 記憶・人格更新ツール群
 │       ├── goals.ts      # ゴール管理ツール群
-│       └── web.ts        # Web検索・URL取得ツール群
+│       ├── web.ts        # Web検索・URL取得ツール群
+│       └── voice.ts      # ボイスチャットツール群 (voice_reply, leave_voice)
+├── voice/
+│   ├── constants.ts      # サンプルレート、VAD パラメータ等の定数
+│   ├── audio-utils.ts    # PCM↔WAV 変換、RMS 音量計算
+│   ├── stt.ts            # whisper.cpp HTTP クライアント (STT)
+│   ├── tts.ts            # VOICEVOX HTTP クライアント (TTS)
+│   ├── receiver.ts       # 音声受信 + VAD (Voice Activity Detection)
+│   ├── session.ts        # VoiceSession (VC接続、STT→Agent→TTS パイプライン)
+│   └── manager.ts        # VoiceSessionManager (ギルドごとに1セッション)
 ├── discord/
-│   ├── events/           # messageCreate, ready, messageReactionAdd
+│   ├── events/           # messageCreate, ready, messageReactionAdd, voiceStateUpdate
 │   └── register.ts       # イベント登録
 ├── llm/
 │   ├── client.ts         # メイン LLM OpenAI SDK ラッパー
@@ -142,6 +154,13 @@ scripts/
 | `web_search` | `query` | SearXNG API でWeb検索（上位5件） |
 | `fetch_url` | `url` | URLの内容を取得（HTML→テキスト変換、2000字制限） |
 
+**ボイスチャットツール:**
+
+| ツール名 | パラメータ | 説明 |
+|---------|-----------|------|
+| `voice_reply` | `content` | ボイスチャンネルで音声として返答（TTS再生、50文字以内推奨） |
+| `leave_voice` | (なし) | ボイスチャンネルから退出する |
+
 ### トリアージ LLM レスポンス形式
 
 トリアージ LLM（高速モデル）は以下の JSON を返す:
@@ -179,6 +198,13 @@ scripts/
        ├─ LLM が必要時に recall_identity ツールで SOUL + IDENTITY の詳細を参照
        └─ finish_reason=stop → 終了（最大10イテレーション）+ typing インジケーター停止
 
+VC参加リクエスト（メンション + キーワード）
+  → メンバーがVC在室？ → voiceManager.startSession() → VC参加
+    → 音声受信ループ: Opus → PCM → VAD → 無音600ms → STT(whisper.cpp)
+      → エージェントループ(voice モード, MAX_ITER=3, temp=0.6)
+        → voice_reply → TTS(VOICEVOX) → WAV → AudioPlayer → Discord
+    → 自動退出: 無音5分 / 最大10分 / 全員退出
+
 リアクション受信 → Partial解決 → bot自身除外 → botメッセージのみ → クールダウン(30秒)
   → mood.sociability < 0.3 ならスキップ
   → エージェントループ起動 (triggeredBy: "reaction", reactionContext 付き)
@@ -205,6 +231,7 @@ cron (2時間) — 低頻度タスク
 | `cron` + `patrolContext` | `patrolContext` | チャンネルの会話 + 「反応したいことがあれば」 |
 | `cron` + `goalContext` | `goalContext` | ゴール情報 + 「アクションを取りたい？」 |
 | `cron` (デフォルト) | なし | 自由行動プロンプト（ゴール情報 + ツール案内） |
+| `voice` | `voiceContext` | トランスクリプト履歴 + 「voice_reply で返答」（MAX_ITER=3, temp=0.6） |
 
 - 同一ユーザーの連続メッセージ（追いメッセージ）はデバウンスバッファで蓄積し、最後のメッセージから3秒後にまとめて処理
 - メンションかどうかに関わらず、全メッセージがトリアージを通る統一フロー
@@ -260,6 +287,7 @@ personality.json / memory.json / goals.json はギルド（Discord サーバー�
 - `.env` ファイルがプロジェクトルートに存在（`.env.example` を参照して作成）
 - `~/.gemini/` に Gemini 認証情報（`oauth_creds.json` 等）が存在
 - Discord Developer Portal で `GuildMembers` Privileged Intent を有効化
+- ボイスチャット使用時: VOICEVOX Engine と whisper.cpp サーバーが起動済み（compose.yaml で自動起動）
 
 ### デプロイコマンド
 
@@ -287,6 +315,8 @@ podman-compose ps
 |---------|-----------|------|
 | bot | haxxorbunny | Discord bot 本体 (Bun) |
 | aiclient | haxxorbunny-aiclient | LLM API (aiclient-2-api, Gemini) |
+| voicevox | haxxorbunny-voicevox | TTS Engine (VOICEVOX, CPU) |
+| whisper | haxxorbunny-whisper | STT Server (whisper.cpp, small model) |
 
 ### データ永続化
 

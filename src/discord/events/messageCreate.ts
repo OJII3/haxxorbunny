@@ -1,4 +1,4 @@
-import type { Message } from "discord.js";
+import { ChannelType, type GuildMember, type Message } from "discord.js";
 import { markActivity, runAgentLoop } from "../../agent/loop.ts";
 import type { AgentContext } from "../../agent/types.ts";
 import { client } from "../../client.ts";
@@ -8,6 +8,7 @@ import { loadPersonality } from "../../llm/prompts/personality.ts";
 import { reflect } from "../../llm/reflection.ts";
 import { triage } from "../../llm/triage.ts";
 import { shouldSkipTriage } from "../../llm/triage-throttle.ts";
+import { voiceManager } from "../../voice/manager.ts";
 
 function isMentioned(message: Message): boolean {
 	const botUser = client.user;
@@ -21,6 +22,84 @@ function isMentioned(message: Message): boolean {
 	if (message.content.includes("世界の泡の住人")) return true;
 
 	return false;
+}
+
+/** VC 参加リクエストのキーワード */
+const VOICE_JOIN_KEYWORDS = [
+	"通話して",
+	"通話しよ",
+	"通話来て",
+	"通話きて",
+	"通話入って",
+	"通話はいって",
+	"通話しない",
+	"vc来て",
+	"vcきて",
+	"vcに来て",
+	"vcにきて",
+	"vc入って",
+	"vcはいって",
+	"vc参加",
+	"ボイチャ",
+	"ボイスチャット",
+	"voice",
+	"おいで",
+	"話そう",
+	"話しよ",
+	"喋ろう",
+	"しゃべろう",
+];
+
+function isVoiceJoinRequest(content: string): boolean {
+	const lower = content.toLowerCase();
+	return VOICE_JOIN_KEYWORDS.some((kw) => lower.includes(kw));
+}
+
+async function handleVoiceJoinRequest(message: Message): Promise<boolean> {
+	const guild = message.guild;
+	if (!guild) return false;
+
+	const member = message.member as GuildMember | null;
+	if (!member) return false;
+
+	// メンバーが VC にいるか確認
+	const voiceChannel = member.voice.channel;
+	if (!voiceChannel) {
+		if (message.channel.isSendable()) {
+			await message.reply("先にVCに入ってから呼んでね！");
+		}
+		return true;
+	}
+
+	// 既にセッションがある場合
+	if (voiceManager.hasActiveSession(guild.id)) {
+		if (message.channel.isSendable()) {
+			await message.reply("もう通話中だよ！");
+		}
+		return true;
+	}
+
+	// テキストチャンネルを取得
+	const textChannel =
+		message.channel.type === ChannelType.GuildText ||
+		message.channel.type === ChannelType.GuildVoice
+			? message.channel
+			: null;
+	if (!textChannel) return true;
+
+	try {
+		await voiceManager.startSession(guild, voiceChannel, textChannel);
+		if (message.channel.isSendable()) {
+			await message.reply(`${voiceChannel.name} に参加したよ！`);
+		}
+	} catch (error) {
+		console.error("[voice] Failed to start voice session:", error);
+		if (message.channel.isSendable()) {
+			await message.reply("VCへの参加に失敗しちゃった…");
+		}
+	}
+
+	return true;
 }
 
 function buildConversationContext(channelId: string): string {
@@ -127,7 +206,15 @@ export async function handleMessageCreate(message: Message): Promise<void> {
 	// アクティビティ記録（人間のメッセージのみ）
 	markActivity();
 
-	// デバウンスバッファにメッセージを追加
+	// メンション判定
 	const mentioned = isMentioned(message);
+
+	// VC 参加リクエストの検出（メンション + VCキーワード）
+	if (mentioned && isVoiceJoinRequest(message.content)) {
+		const handled = await handleVoiceJoinRequest(message);
+		if (handled) return;
+	}
+
+	// デバウンスバッファにメッセージを追加
 	bufferMessage(message, mentioned);
 }

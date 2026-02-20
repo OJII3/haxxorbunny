@@ -20,7 +20,7 @@ import {
 	markChannelResponded,
 	unlockChannel,
 } from "../llm/triage-throttle.ts";
-import { getToolHandler, toolSpecs } from "./tools/index.ts";
+import { getToolHandler, toolSpecs, voiceToolSpecs } from "./tools/index.ts";
 import type { AgentContext } from "./types.ts";
 
 const MAX_ITERATIONS = 10;
@@ -117,7 +117,34 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 		name?: string;
 	}> = [{ role: "system", content: systemPrompt }];
 
-	if (ctx.triggerMessage && ctx.triggeredBy === "triage") {
+	const isVoiceMode = ctx.triggeredBy === "voice";
+
+	if (isVoiceMode && ctx.voiceContext) {
+		// ボイスチャットトリガー
+		const vc = ctx.voiceContext;
+		const transcriptHistory = vc.recentTranscripts
+			.map((t) => `[${t.displayName}]: ${t.text}`)
+			.join("\n");
+
+		messages.push({
+			role: "system",
+			content: `あなたは今ボイスチャンネル「${vc.voiceChannelName}」で通話中です。
+参加者: ${vc.participants.join(", ")}
+
+【ボイスモードのルール】
+- voice_reply ツールで音声として返答する（50文字以内推奨）
+- 短く、テンポよく返す。長文禁止
+- 退出したい場合は leave_voice
+- 何もしない場合は do_nothing`,
+		});
+
+		if (transcriptHistory) {
+			messages.push({
+				role: "user",
+				content: `## 直近の会話（音声）\n${transcriptHistory}`,
+			});
+		}
+	} else if (ctx.triggerMessage && ctx.triggeredBy === "triage") {
 		// メッセージトリガー: 直近の会話履歴 + トリガーメッセージ
 		const recentMessages = await ctx.triggerMessage.channel.messages.fetch({
 			limit: 20,
@@ -232,16 +259,21 @@ ${goalsPrompt ? `\n${goalsPrompt}\n` : ""}
 	let messageSent = false;
 	let shouldStop = false;
 
+	// voice モード: イテレーション数とパラメータを調整
+	const maxIter = isVoiceMode ? 3 : MAX_ITERATIONS;
+	const temperature = isVoiceMode ? 0.6 : 0.8;
+	const activeToolSpecs = isVoiceMode ? voiceToolSpecs : toolSpecs;
+
 	// エージェントループ
-	for (let i = 0; i < MAX_ITERATIONS; i++) {
+	for (let i = 0; i < maxIter; i++) {
 		if (shouldStop) break;
 		const response = await llm.chat.completions.create({
 			model: config.llm.model,
 			messages: messages as Parameters<
 				typeof llm.chat.completions.create
 			>[0]["messages"],
-			tools: toolSpecs,
-			temperature: 0.8,
+			tools: activeToolSpecs,
+			temperature,
 		});
 
 		const choice = response.choices[0];
@@ -285,9 +317,15 @@ ${goalsPrompt ? `\n${goalsPrompt}\n` : ""}
 		});
 
 		// ツール呼び出しがなければ、テキストを send_message で送信（reply ではなく）
+		// voice モード時はフォールバック送信しない（voice_reply ツール経由で話すべき）
 		if (functionToolCalls.length === 0) {
 			const textContent = assistantMessage.content?.trim();
-			if (textContent && !messageSent && ctx.channel.isSendable()) {
+			if (
+				textContent &&
+				!messageSent &&
+				!isVoiceMode &&
+				ctx.channel.isSendable()
+			) {
 				// cron トリガー時は重複チェック
 				if (ctx.triggeredBy === "cron" && isDuplicate(guildId, textContent)) {
 					console.log(
@@ -329,7 +367,9 @@ ${goalsPrompt ? `\n${goalsPrompt}\n` : ""}
 			const handler = getToolHandler(toolName);
 
 			const isSendAction =
-				toolName === "send_message" || toolName === "reply_to_message";
+				toolName === "send_message" ||
+				toolName === "reply_to_message" ||
+				toolName === "voice_reply";
 
 			let resultText: string;
 
