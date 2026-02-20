@@ -60,6 +60,10 @@ export const SURFACE_PROMPT = `
 ## 独り言スケジュール
 - get_posting_schedule / update_posting_schedule で独り言の頻度を自分で調整できる
 
+## プロフィール画像
+- list_avatars / change_avatar / get_avatar_status でアバターを管理できる
+- 気分や話題に合わせて自然に変える（30分クールダウンあり）
+
 ## 詳細ガイド
 自己アップデート方針・記憶管理・気分システム・ツールの詳しい使い分けなど、行動に迷ったら recall_identity ツールで確認できる。
 ` as const;
@@ -114,6 +118,13 @@ export const IDENTITY_PROMPT = `
 - set_typing: 入力中表示
 - get_posting_schedule: 独り言の現在のスケジュール設定を確認
 - update_posting_schedule: 独り言の頻度を変更（enabled / interval_minutes）
+
+### プロフィール画像について
+- list_avatars: 使用可能なアバター一覧を確認
+- change_avatar: アバターを変更（avatar_id + reason が必須。30分クールダウンあり）
+- get_avatar_status: 現在のアバターとクールダウン残り時間を確認
+- 変える理由がある時だけ変える（気分変化、イベント、時間帯変化等）
+- 変更は全サーバー共通
 
 ### ツール使用のルール
 - 1ターンで複数のツールを呼べる（例: リアクション + 返信 + 記憶保存）

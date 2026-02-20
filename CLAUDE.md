@@ -50,6 +50,7 @@ src/
 │       ├── memory.ts     # 記憶・人格更新ツール群
 │       ├── goals.ts      # ゴール管理ツール群
 │       ├── heartbeat.ts  # スケジュール管理ツール群 (独り言の頻度調整)
+│       ├── avatar.ts     # プロフィール画像管理ツール群
 │       ├── web.ts        # Web検索・URL取得ツール群
 │       └── voice.ts      # ボイスチャットツール群 (voice_reply, leave_voice)
 ├── voice/
@@ -76,6 +77,7 @@ src/
 │   ├── dream.ts          # 夢処理 (記憶の連想分析・洞察生成)
 │   ├── message-buffer.ts # 追いメッセージのデバウンスバッファ (channelId:userId 単位)
 │   ├── message-dedup.ts  # メッセージ重複抑制 (SHA-256 + 24時間キャッシュ)
+│   ├── avatar.ts         # アバター管理 (マニフェスト読み込み, ステート管理, クールダウン判定)
 │   └── prompts/
 │       ├── system.ts     # SURFACE_PROMPT (軽量要約) + SOUL_PROMPT (不変の本質) + IDENTITY_PROMPT (行動指針)
 │       └── personality.ts # 可変プロンプト (4次元気分ベクトル + personality.json)
@@ -101,6 +103,9 @@ data/
 │       ├── goals.json        # GOALS: ゴール管理 (bot が自己更新可能)
 │       └── memory/           # 日次記憶蒸留
 │           └── YYYY-MM-DD.json
+├── avatars/              # アバター画像 + メタデータ
+│   └── manifest.json     # アバター定義（ID, ファイル名, 名前, 説明, タグ）
+├── avatar-state.json     # アバター状態（実行時生成, gitignore）
 ├── haxxorbunny.db        # SQLite DB (gitignore)
 scripts/
 └── migrate-to-guild.ts   # 既存データ移行スクリプト
@@ -177,6 +182,14 @@ scripts/
 |---------|-----------|------|
 | `get_posting_schedule` | (なし) | 独り言の現在の設定（enabled, interval_minutes）を返す |
 | `update_posting_schedule` | `enabled?`, `interval_minutes?` | 独り言の頻度を変更。interval は 15〜1440 分の範囲 |
+
+**プロフィール画像ツール:**
+
+| ツール名 | パラメータ | 説明 |
+|---------|-----------|------|
+| `list_avatars` | (なし) | 使用可能なアバター一覧（ID, 名前, 説明, タグ, 現在のアバター表示）|
+| `change_avatar` | `avatar_id`, `reason` | アバター変更（reason 必須で記録。30分クールダウンあり）|
+| `get_avatar_status` | (なし) | 現在のアバター + クールダウン残り時間 |
 
 ### トリアージ LLM レスポンス形式
 
@@ -271,6 +284,7 @@ cron (2時間) — 低頻度タスク
 - **チャンネル巡回**: bot が不在のチャンネルを定期的にスキャンし、会話があれば参加を検討
 - **メンション記憶強化**: メンション（直接の呼びかけ）による指示・依頼は忘れにくくする。AgentContext に `isMentioned` を伝播し、①システムプロンプトで save_memory を促す、②emotional_impact の最低値を 3 にフロアリング。30日後のスコアが impact=2 の ~0.425 → impact=3 の ~0.500 以上に改善
 - **自律的スケジュール調整**: bot が `get_posting_schedule` / `update_posting_schedule` ツールで独り言（autonomous_post）の頻度を自分で調整可能。気分や状況に応じて有効/無効の切り替えや間隔（15〜1440分）の変更ができる
+- **自律的プロフィール画像変更**: bot が `list_avatars` / `change_avatar` / `get_avatar_status` ツールでプロフィール画像を自律的に変更可能。30分のクールダウンで頻繁な変更を防止。変更履歴（直近20件）を記録。画像は `data/avatars/` に配置し `manifest.json` で管理
 
 ### ギルドごとのデータ分離
 
@@ -282,6 +296,8 @@ personality.json / memory.json / goals.json はギルド（Discord サーバー�
 | memory.json | ギルドごと | サーバーごとに独立した記憶 |
 | goals.json | ギルドごと | サーバーごとに独立した目標 |
 | heartbeat.json | グローバル | タスクスケジュールはボット全体の設定 |
+| avatars/manifest.json | グローバル | アバター画像定義はボット全体の設定 |
+| avatar-state.json | グローバル | アバター状態（変更は全サーバー共通） |
 | isAgentBusy | ギルドごと | 複数ギルドで同時にエージェント実行可能 |
 | message-dedup | guildId をハッシュに含む | ギルド間で同じ発言を許可 |
 | DB (messages, bot_actions) | guild_id カラム | ギルド限定クエリに対応 |
