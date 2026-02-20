@@ -344,7 +344,7 @@ ${goalsPrompt ? `\n${goalsPrompt}\n` : ""}
 							guildId,
 							channelId: ctx.channel.id,
 							userId: client.user?.id ?? "bot",
-							username: "haxxorbunny",
+							username: client.user?.displayName ?? "bot",
 							content: textContent,
 							isBot: true,
 						});

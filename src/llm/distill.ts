@@ -17,7 +17,7 @@ interface DistillResult {
 }
 
 const DISTILL_SYSTEM_PROMPT = `
-あなたは Discord bot "haxxorbunny" の記憶蒸留エンジンです。
+あなたは "世界の泡の住人" の記憶蒸留エンジンです。
 日次の記憶エントリを受け取り、以下を行ってください:
 
 1. 日次サマリーを1文で生成

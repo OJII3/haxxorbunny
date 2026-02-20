@@ -15,7 +15,7 @@ interface ReflectionResult {
 }
 
 const REFLECTION_SYSTEM_PROMPT = `
-あなたは Discord bot "haxxorbunny" の内省エンジンです。
+あなたは "世界の泡の住人" の内省エンジンです。
 会話を観察して、以下の2点だけを判定してください:
 
 1. 気分(mood)・最近の話題(recent_topics)・興味(interests)に微調整が必要か

@@ -45,7 +45,7 @@ export interface AgentContext {
 	guild: Guild;
 	/** 起動トリガーの種別 */
 	triggeredBy: "triage" | "cron" | "reaction" | "voice";
-	/** メンション（@haxxorbunny 等）による起動かどうか */
+	/** メンション（@bot 等）による起動かどうか */
 	isMentioned?: boolean;
 	/** チャンネル巡回コンテキスト */
 	patrolContext?: PatrolContext;
