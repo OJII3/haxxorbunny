@@ -43,6 +43,7 @@ src/
 │       ├── discord.ts    # Discord 操作ツール群
 │       ├── memory.ts     # 記憶・人格更新ツール群
 │       ├── goals.ts      # ゴール管理ツール群
+│       ├── heartbeat.ts  # スケジュール管理ツール群 (独り言の頻度調整)
 │       ├── web.ts        # Web検索・URL取得ツール群
 │       └── voice.ts      # ボイスチャットツール群 (voice_reply, leave_voice)
 ├── voice/
@@ -161,6 +162,13 @@ scripts/
 | `voice_reply` | `content` | ボイスチャンネルで音声として返答（TTS再生、50文字以内推奨） |
 | `leave_voice` | (なし) | ボイスチャンネルから退出する |
 
+**スケジュール管理ツール:**
+
+| ツール名 | パラメータ | 説明 |
+|---------|-----------|------|
+| `get_posting_schedule` | (なし) | 独り言の現在の設定（enabled, interval_minutes）を返す |
+| `update_posting_schedule` | `enabled?`, `interval_minutes?` | 独り言の頻度を変更。interval は 15〜1440 分の範囲 |
+
 ### トリアージ LLM レスポンス形式
 
 トリアージ LLM（高速モデル）は以下の JSON を返す:
@@ -210,14 +218,14 @@ VC参加リクエスト（メンション + キーワード）
   → エージェントループ起動 (triggeredBy: "reaction", reactionContext 付き)
 
 cron (13分) — 高頻度タスク（agentBusy のみチェック）
-  ├─ autonomous_post (15分): アクティブ時間内のみ → 自由行動プロンプト → エージェントループ
-  ├─ channel_patrol (5分): 全チャンネルスキャン → bot不在10分超のチャンネル → エージェントループ
-  └─ goal_check (30分): アクティブゴールあれば → ゴールコンテキスト付きエージェントループ
+  ├─ autonomous_post (60分, disabled): アクティブ時間内のみ → 自由行動プロンプト → エージェントループ
+  ├─ channel_patrol (30分): 全チャンネルスキャン → bot不在10分超のチャンネル → エージェントループ
+  └─ goal_check (120分): アクティブゴールあれば → ゴールコンテキスト付きエージェントループ
 
 cron (2時間) — 低頻度タスク
-  ├─ distill_memory (6時間): 蒸留LLM(flash) → 日次記憶集約 + 長期記憶更新
+  ├─ distill_memory (12時間): 蒸留LLM(flash) → 日次記憶集約 + 長期記憶更新
   ├─ cleanup_old_memory (24時間): 古い日次ファイルの整理
-  └─ dream_processing (12時間): 夢処理LLM(flash) → 記憶連想分析 + 洞察生成
+  └─ dream_processing (24時間): 夢処理LLM(flash) → 記憶連想分析 + 洞察生成
 ```
 
 ### エージェントループのコンテキスト対応
@@ -246,13 +254,14 @@ cron (2時間) — 低頻度タスク
 - **重複発言抑制**: SHA-256 + 冒頭50文字ハッシュで24時間キャッシュ。cron トリガー時のみチェック
 - **4次元気分ベクトル**: energy/positivity/sociability/curiosity (各0-1)。時間帯で energy 自動変動、急変防止の補間（70% new + 30% old）
 - **感情付き記憶**: MemoryEntry に emotional_impact (1-5) + created_at。エビングハウス忘却曲線（30日半減期）でスコアリング
-- **夢処理**: 12時間ごとに記憶を連想分析。洞察を [dream] タグ付き記憶として追加、不要記憶を整理
+- **夢処理**: 24時間ごとに記憶を連想分析。洞察を [dream] タグ付き記憶として追加、不要記憶を整理
 - **プロンプト階層化**: 軽量な SURFACE_PROMPT を毎回送信、詳細な SOUL_PROMPT + IDENTITY_PROMPT は recall_identity ツールでオンデマンド参照。トークン消費を ~1250t 削減
 - **メッセージデバウンス**: 同一 channelId:userId の連続メッセージを3秒（`MESSAGE_BUFFER_MS`）蓄積。最大15秒（`MESSAGE_BUFFER_MAX_MS`）で強制フラッシュ。結合コンテンツとしてトリアージに渡す
 - **自動 typing インジケーター**: エージェントループ中は5秒間隔で sendTyping() を呼び、Discord 上に「入力中…」を表示
 - **ゴール駆動行動**: bot が自分で目標を設定し、cron で定期的に進捗確認・アクション実行
 - **チャンネル巡回**: bot が不在のチャンネルを定期的にスキャンし、会話があれば参加を検討
 - **メンション記憶強化**: メンション（直接の呼びかけ）による指示・依頼は忘れにくくする。AgentContext に `isMentioned` を伝播し、①システムプロンプトで save_memory を促す、②emotional_impact の最低値を 3 にフロアリング。30日後のスコアが impact=2 の ~0.425 → impact=3 の ~0.500 以上に改善
+- **自律的スケジュール調整**: bot が `get_posting_schedule` / `update_posting_schedule` ツールで独り言（autonomous_post）の頻度を自分で調整可能。気分や状況に応じて有効/無効の切り替えや間隔（15〜1440分）の変更ができる
 
 ### ギルドごとのデータ分離
 
