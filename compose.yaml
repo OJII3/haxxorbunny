@@ -23,6 +23,15 @@ services:
       - ${HOME}/.gemini:/root/.gemini:ro
     restart: unless-stopped
 
+  searxng:
+    image: searxng/searxng:latest
+    container_name: haxxorbunny-searxng
+    environment:
+      - SEARXNG_BASE_URL=http://localhost:8080/
+    volumes:
+      - searxng-data:/etc/searxng
+    restart: unless-stopped
+
   voicevox:
     image: voicevox/voicevox_engine:cpu-latest
     container_name: haxxorbunny-voicevox
@@ -50,4 +59,5 @@ services:
 volumes:
   bot-data:
   aiclient-configs:
+  searxng-data:
   whisper-models:
