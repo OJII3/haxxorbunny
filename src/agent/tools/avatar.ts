@@ -3,8 +3,8 @@ import { client } from "../../client.ts";
 import {
 	avatarImageExists,
 	getAvatarImagePath,
-	getCooldownRemaining,
-	isOnCooldown,
+	getCooldownRemainingFromState,
+	isOnCooldownFromState,
 	loadManifest,
 	loadState,
 	recordChange,
@@ -18,6 +18,14 @@ function ok(result: string): ToolResult {
 function fail(result: string): ToolResult {
 	return { success: false, result };
 }
+
+const SUPPORTED_EXTENSIONS: Record<string, string> = {
+	png: "image/png",
+	jpg: "image/jpeg",
+	jpeg: "image/jpeg",
+	gif: "image/gif",
+	webp: "image/webp",
+};
 
 const listAvatarsHandler: ToolHandler = async () => {
 	const manifest = loadManifest();
@@ -52,8 +60,8 @@ const changeAvatarHandler: ToolHandler = async (args, ctx) => {
 		return ok(`既に ${avatarId} を使用中です。変更不要。`);
 	}
 
-	if (isOnCooldown()) {
-		const remaining = Math.ceil(getCooldownRemaining() / 60_000);
+	if (isOnCooldownFromState(state)) {
+		const remaining = Math.ceil(getCooldownRemainingFromState(state) / 60_000);
 		return fail(
 			`クールダウン中です。あと約${remaining}分後に変更可能になります。`,
 		);
@@ -68,21 +76,37 @@ const changeAvatarHandler: ToolHandler = async (args, ctx) => {
 		);
 	}
 
+	const imagePath = getAvatarImagePath(avatar.filename);
+	if (!imagePath) {
+		return fail(`不正なファイル名です: "${avatar.filename}"`);
+	}
+
 	if (!avatarImageExists(avatar.filename)) {
 		return fail(
 			`画像ファイル "${avatar.filename}" が data/avatars/ に見つかりません。`,
 		);
 	}
 
+	const ext = avatar.filename.split(".").pop()?.toLowerCase() ?? "";
+	const mime = SUPPORTED_EXTENSIONS[ext];
+	if (!mime) {
+		return fail(
+			`サポートされていない画像形式です: .${ext} (対応: ${Object.keys(SUPPORTED_EXTENSIONS).join(", ")})`,
+		);
+	}
+
+	if (!client.user) {
+		return fail(
+			"bot がまだログインしていません。しばらく待ってから再試行してください。",
+		);
+	}
+
 	try {
-		const imageBuffer = readFileSync(getAvatarImagePath(avatar.filename));
+		const imageBuffer = readFileSync(imagePath);
 		const base64 = imageBuffer.toString("base64");
-		const ext = avatar.filename.split(".").pop()?.toLowerCase();
-		const mime =
-			ext === "png" ? "image/png" : ext === "gif" ? "image/gif" : "image/jpeg";
 		const dataUri = `data:${mime};base64,${base64}`;
 
-		await client.user?.setAvatar(dataUri);
+		await client.user.setAvatar(dataUri);
 		recordChange(avatarId, reason, ctx.triggeredBy);
 
 		return ok(
@@ -101,7 +125,7 @@ const changeAvatarHandler: ToolHandler = async (args, ctx) => {
 
 const getAvatarStatusHandler: ToolHandler = async () => {
 	const state = loadState();
-	const remaining = getCooldownRemaining();
+	const remaining = getCooldownRemainingFromState(state);
 	const cooldownText =
 		remaining > 0
 			? `クールダウン中（あと約${Math.ceil(remaining / 60_000)}分）`
