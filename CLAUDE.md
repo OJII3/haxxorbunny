@@ -2,6 +2,8 @@
 
 Discord に住む自律的エージェント bot。LLM (aiclient-2-api 経由 Gemini) を使い、Tool-Use（関数呼び出し）方式で自律的に行動する。
 
+Main branch: `main`
+
 ## 技術スタック
 
 - Runtime: Bun

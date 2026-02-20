@@ -17,7 +17,7 @@ user_invocable: true
 
 ### 2. 変更内容の把握
 
-base ブランチは CLAUDE.md の「Main branch」の値を使う（現在: `feat/initial-setup`。将来変更される可能性あり）。
+base ブランチは CLAUDE.md の「Main branch」の値を使う（現在: `main`。将来変更される可能性あり）。
 
 以下を並列で実行:
 
