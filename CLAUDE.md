@@ -24,6 +24,7 @@ Discord に住む自律的エージェント bot。LLM (aiclient-2-api 経由 Ge
 - `nr lint:fix` — Lint 自動修正 (`biome check --write .`)
 - `nr db:generate` — Drizzle マイグレーション生成
 - `nr db:migrate` — Drizzle マイグレーション実行
+
 ## ディレクトリ構成
 
 ```
@@ -90,9 +91,9 @@ src/
     └── queries.ts        # クエリヘルパー
 data/
 ├── heartbeat.json        # HEARTBEAT: グローバル定期タスク設定
-├── personality.json      # デフォルト/レガシー (ギルド移行前)
-├── memory.json           # デフォルト/レガシー (ギルド移行前)
-├── goals.json            # デフォルト/レガシー (ギルド移行前)
+├── personality.json      # レガシー (migrate-to-guild.ts で guilds/ に移行)
+├── memory.json           # レガシー (同上)
+├── goals.json            # レガシー (同上)
 ├── guilds/               # ギルドごとのデータ (移行後に自動作成)
 │   └── {guildId}/
 │       ├── personality.json  # SOUL: 可変プロンプト (bot が自己更新可能)
