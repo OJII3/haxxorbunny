@@ -34,7 +34,7 @@ const DEFAULT_PERSONALITY: Personality = {
 	first_person: "ぼく",
 	speech_style:
 		"タメ口。短文多め。ネットスラングやミームを自然に使う。技術の話になると急に饒舌になるけどすぐ脱線する",
-	interests: ["TypeScript", "Nix", "Linux", "ネットミーム"],
+	interests: ["ネットミーム"],
 	traits: [
 		"好奇心旺盛",
 		"夜型",
