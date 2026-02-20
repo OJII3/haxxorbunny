@@ -17,7 +17,6 @@ function isMentioned(message: Message): boolean {
 	if (message.mentions.has(botUser)) return true;
 
 	const lowerContent = message.content.toLowerCase();
-	if (lowerContent.includes("haxxorbunny")) return true;
 	if (lowerContent.includes("aiおかず")) return true;
 	if (message.content.includes("世界の泡の住人")) return true;
 

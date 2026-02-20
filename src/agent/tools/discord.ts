@@ -56,7 +56,7 @@ const sendMessage: ToolHandler = async (args, ctx) => {
 		guildId: ctx.guild.id,
 		channelId: targetChannel.id,
 		userId: botUserId(),
-		username: "haxxorbunny",
+		username: client.user?.displayName ?? "bot",
 		content,
 		isBot: true,
 	});
@@ -73,7 +73,7 @@ const replyToMessage: ToolHandler = async (args, ctx) => {
 		guildId: ctx.guild.id,
 		channelId: ctx.channel.id,
 		userId: botUserId(),
-		username: "haxxorbunny",
+		username: client.user?.displayName ?? "bot",
 		content,
 		isBot: true,
 	});
