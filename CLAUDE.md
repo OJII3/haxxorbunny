@@ -45,7 +45,7 @@ src/
 │   └── paths.ts          # ギルドごとのデータパスユーティリティ
 ├── agent/
 │   ├── types.ts          # AgentContext, ToolResult, ToolHandler 等の型定義
-│   ├── loop.ts           # エージェントループ本体 (MAX_ITERATIONS=10, ギルドごとに busy 管理)
+│   ├── loop.ts           # エージェントループ本体 (MAX_ITERATIONS=10, ギルドごとに busy 管理, streaming + max_tokens:2048)
 │   └── tools/
 │       ├── index.ts      # ツールレジストリ（定義集約 + 名前→ハンドラ Map）
 │       ├── discord.ts    # Discord 操作ツール群
@@ -225,9 +225,11 @@ scripts/
   トリアージ結果:
   ├─ ignore:  reflection LLM(flash, fire-and-forget) → personality + memory 更新
   └─ engage:  エージェントループ起動 (自動 typing インジケーター開始)
-       ├─ LLM に tools 定義 + SURFACE + personality + MEMORY + 会話履歴を送信 (軽量構成)
+       ├─ LLM に tools 定義 + SURFACE + personality + MEMORY + 会話履歴を送信 (軽量構成, stream:true, max_tokens:2048)
+       ├─ ストリーミングでチャンクを受信 → content + tool_calls を蓄積・組み立て
        ├─ tool_calls → 各ツール実行 → 結果を LLM に返す → ループ
        ├─ LLM が必要時に recall_identity ツールで SOUL + IDENTITY の詳細を参照
+       ├─ finish_reason=length → 途中切れガードで安全に終了
        └─ finish_reason=stop → 終了（最大10イテレーション）+ typing インジケーター停止
 
 VC参加リクエスト（メンション + キーワード）
@@ -287,6 +289,7 @@ cron (2時間) — 低頻度タスク
 - **メンション記憶強化**: メンション（直接の呼びかけ）による指示・依頼は忘れにくくする。AgentContext に `isMentioned` を伝播し、①システムプロンプトで save_memory を促す、②emotional_impact の最低値を 3 にフロアリング。30日後のスコアが impact=2 の ~0.425 → impact=3 の ~0.500 以上に改善
 - **自律的スケジュール調整**: bot が `get_posting_schedule` / `update_posting_schedule` ツールで独り言（autonomous_post）の頻度を自分で調整可能。気分や状況に応じて有効/無効の切り替えや間隔（15〜1440分）の変更ができる
 - **自律的プロフィール画像変更**: bot が `list_avatars` / `change_avatar` / `get_avatar_status` ツールでプロフィール画像を自律的に変更可能。30分のクールダウンで頻繁な変更を防止。変更履歴（直近20件）を記録。画像は `data/avatars/` に配置し `manifest.json` で管理
+- **LLM ストリーミング応答**: エージェントループの LLM 呼び出しは `stream: true` + `max_tokens: 2048` で動作。チャンクから content と tool_calls を index ベースで蓄積・組み立て。aiclient-2-api のバッファリング遅延を回避し TTFB を改善。ストリームエラー・空レスポンス・max_tokens 途中切れのガード付き
 
 ### ギルドごとのデータ分離
 
