@@ -290,39 +290,62 @@ ${goalsPrompt ? `\n${goalsPrompt}\n` : ""}
 			}
 		>();
 
-		for await (const chunk of stream) {
-			const delta = chunk.choices[0]?.delta;
-			if (!delta) continue;
+		try {
+			for await (const chunk of stream) {
+				const delta = chunk.choices[0]?.delta;
+				if (!delta) continue;
 
-			if (chunk.choices[0]?.finish_reason) {
-				finishReason = chunk.choices[0].finish_reason;
-			}
+				if (chunk.choices[0]?.finish_reason) {
+					finishReason = chunk.choices[0].finish_reason;
+				}
 
-			if (delta.content) {
-				contentParts.push(delta.content);
-			}
+				if (delta.content) {
+					contentParts.push(delta.content);
+				}
 
-			if (delta.tool_calls) {
-				for (const tc of delta.tool_calls) {
-					const idx = tc.index;
-					const existing = toolCallMap.get(idx);
-					if (!existing) {
-						toolCallMap.set(idx, {
-							id: tc.id ?? "",
-							type: "function",
-							function: {
-								name: tc.function?.name ?? "",
-								arguments: tc.function?.arguments ?? "",
-							},
-						});
-					} else {
-						if (tc.id) existing.id = tc.id;
-						if (tc.function?.name) existing.function.name += tc.function.name;
-						if (tc.function?.arguments)
-							existing.function.arguments += tc.function.arguments;
+				if (delta.tool_calls) {
+					for (const tc of delta.tool_calls) {
+						const idx = tc.index;
+						const existing = toolCallMap.get(idx);
+						if (!existing) {
+							toolCallMap.set(idx, {
+								id: tc.id ?? "",
+								type: "function",
+								function: {
+									name: tc.function?.name ?? "",
+									arguments: tc.function?.arguments ?? "",
+								},
+							});
+						} else {
+							if (tc.id) existing.id = tc.id;
+							if (tc.function?.name)
+								existing.function.name =
+									existing.function.name || tc.function.name;
+							if (tc.function?.arguments)
+								existing.function.arguments += tc.function.arguments;
+						}
 					}
 				}
 			}
+		} catch (error) {
+			console.error("[agent] Stream error:", error);
+			break;
+		}
+
+		// 空レスポンスのガード（チャンクが一つも来なかった場合）
+		if (
+			contentParts.length === 0 &&
+			toolCallMap.size === 0 &&
+			finishReason === null
+		) {
+			console.error("[agent] Empty streaming response (no chunks received)");
+			break;
+		}
+
+		// max_tokens に到達して出力が途中で切れた場合のガード
+		if (finishReason === "length") {
+			console.warn("[agent] Response truncated by max_tokens, skipping");
+			break;
 		}
 
 		const assembledContent =
