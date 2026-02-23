@@ -6,6 +6,9 @@ import { client } from "../client.ts";
 /** bot 最終発言から N 分以上経過したチャンネルのみ巡回対象 */
 const PATROL_THRESHOLD_MINUTES = 10;
 
+/** 直近の人間メッセージがこれより古いチャンネルは巡回対象外 (ミリ秒) */
+const PATROL_MAX_AGE_MS = 60 * 24 * 60 * 60 * 1000; // 60日 (約2ヶ月)
+
 interface PatrolCandidate {
 	channel: TextChannel;
 	minutesSinceLastBotMessage: number;
@@ -33,8 +36,17 @@ async function scanChannelsForGuild(guild: Guild): Promise<PatrolCandidate[]> {
 			if (recentMessages.size === 0) continue;
 
 			// 直近メッセージの中にbot以外の人間のメッセージがあるか
-			const hasHumanMessages = recentMessages.some((m) => !m.author.bot);
-			if (!hasHumanMessages) continue;
+			const humanMessages = recentMessages.filter((m) => !m.author.bot);
+			if (humanMessages.size === 0) continue;
+
+			// 最新の人間メッセージが古すぎる場合はスキップ
+			const newestHumanMessage = humanMessages.first();
+			if (
+				newestHumanMessage &&
+				Date.now() - newestHumanMessage.createdTimestamp > PATROL_MAX_AGE_MS
+			) {
+				continue;
+			}
 
 			// bot の最終発言を探す
 			const lastBotMessage = recentMessages.find((m) => m.author.id === botId);
