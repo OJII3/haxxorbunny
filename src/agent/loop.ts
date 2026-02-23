@@ -334,8 +334,14 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 		messages.push({
 			role: "user",
 			content: `あなたはこのチャンネル (#${ctx.patrolContext.channelName}) を ${ctx.patrolContext.minutesSinceLastBotMessage} 分間見ていませんでした。
-会話を読んで、反応したいことがあればどうぞ（コメント、リアクション、質問など）。
-特に言うことがなければ do_nothing を呼んでください。無理に会話に入る必要はありません。`,
+会話を読んで状況を把握してください。
+
+【重要】基本的には do_nothing を選んでください。発言するのは以下の場合のみ:
+- あなたに直接関係する話題や、名前が出ている場合
+- 明らかに困っている人がいて、あなたが有益な情報を提供できる場合
+- 会話が自分への質問や依頼を含んでいる場合
+
+それ以外は do_nothing で静かに見守ってください。「何か言わなきゃ」と思う必要はありません。`,
 		});
 	} else if (ctx.goalContext) {
 		// ゴールチェックトリガー

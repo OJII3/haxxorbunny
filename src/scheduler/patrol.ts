@@ -4,7 +4,7 @@ import type { AgentContext } from "../agent/types.ts";
 import { client } from "../client.ts";
 
 /** bot 最終発言から N 分以上経過したチャンネルのみ巡回対象 */
-const PATROL_THRESHOLD_MINUTES = 10;
+const PATROL_THRESHOLD_MINUTES = 60;
 
 /** 直近の人間メッセージがこれより古いチャンネルは巡回対象外 (ミリ秒) */
 const PATROL_MAX_AGE_MS = 60 * 24 * 60 * 60 * 1000; // 60日 (約2ヶ月)
