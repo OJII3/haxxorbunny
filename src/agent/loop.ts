@@ -34,6 +34,7 @@ const MAX_ITERATIONS = 10;
  * tool_call の arguments をパースする。
  * LLM が複数の JSON オブジェクトを連結して返すケースに対応し、
  * 先頭の有効な JSON オブジェクトのみを抽出する。
+ * （連結 JSON の全展開はエージェントループ側で parseAllJsonObjects を使用）
  */
 export function parseToolArguments(raw: string): Record<string, unknown> {
 	const validate = (parsed: unknown): Record<string, unknown> => {
@@ -58,41 +59,15 @@ export function parseToolArguments(raw: string): Record<string, unknown> {
 		) {
 			throw e;
 		}
-		// 連結された JSON の先頭オブジェクトを抽出
-		if (!raw.startsWith("{")) {
-			throw new SyntaxError(`Invalid tool arguments: ${raw}`);
-		}
-
-		// ブレース深度でオブジェクト境界を検出
-		let depth = 0;
-		let inString = false;
-		let escaped = false;
-		for (let i = 0; i < raw.length; i++) {
-			const ch = raw[i];
-			if (escaped) {
-				escaped = false;
-				continue;
+		// 連結 JSON フォールバック: parseAllJsonObjects に委譲
+		const objects = parseAllJsonObjects(raw);
+		if (objects.length > 0 && objects[0]) {
+			if (objects.length > 1) {
+				console.warn(
+					`[agent] Malformed tool arguments (concatenated JSON), using first object only. raw=${raw.slice(0, 500)}`,
+				);
 			}
-			if (ch === "\\" && inString) {
-				escaped = true;
-				continue;
-			}
-			if (ch === '"') {
-				inString = !inString;
-				continue;
-			}
-			if (inString) continue;
-			if (ch === "{") depth++;
-			if (ch === "}") {
-				depth--;
-				if (depth === 0) {
-					const firstObj = raw.slice(0, i + 1);
-					console.warn(
-						`[agent] Malformed tool arguments (concatenated JSON), using first object only. raw=${raw.slice(0, 500)}`,
-					);
-					return validate(JSON.parse(firstObj));
-				}
-			}
+			return validate(objects[0]);
 		}
 		throw new SyntaxError(`Invalid tool arguments: ${raw}`);
 	}
@@ -560,6 +535,8 @@ ${goalsPrompt ? `\n${goalsPrompt}\n` : ""}
 					if (!obj) continue;
 					const inferredName = inferToolNameFromArgs(obj);
 					if (inferredName) {
+						// NOTE: 合成 ID は OpenAI の call_xxx 形式から外れるが、
+						// aiclient-2-api 経由の Gemini では問題なし
 						functionToolCalls.push({
 							id: `${toolCall.id}_x${j}`,
 							type: "function",

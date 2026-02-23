@@ -108,5 +108,7 @@ export function inferToolNameFromArgs(
 		}
 	}
 
+	// 半数以上のキーがマッチしない場合は推定を諦める
+	if (bestScore < 0.5) return null;
 	return bestMatch;
 }
