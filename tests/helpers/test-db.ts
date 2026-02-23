@@ -4,6 +4,9 @@ import { botActions, messages } from "../../src/db/schema.ts";
 /**
  * テスト用にテーブルを作成する。
  * bun:sqlite の :memory: DB は接続ごとに空なので、毎回テーブル定義が必要。
+ *
+ * 注意: このテーブル定義は src/db/schema.ts および src/db/migrate.ts と
+ * 同期を保つ必要がある。スキーマ変更時はここも更新すること。
  */
 export function createTestTables(): void {
 	db.$client.run(`
