@@ -54,7 +54,8 @@ src/
 │       ├── heartbeat.ts  # スケジュール管理ツール群 (独り言の頻度調整)
 │       ├── avatar.ts     # プロフィール画像管理ツール群
 │       ├── web.ts        # Web検索・URL取得ツール群
-│       └── voice.ts      # ボイスチャットツール群 (voice_reply, leave_voice)
+│       ├── voice.ts      # ボイスチャットツール群 (voice_reply, leave_voice)
+│       └── logs.ts       # ログ参照ツール群 (view_messages, view_my_actions)
 ├── voice/
 │   ├── constants.ts      # サンプルレート、VAD パラメータ等の定数
 │   ├── audio-utils.ts    # PCM↔WAV 変換、RMS 音量計算
@@ -192,6 +193,13 @@ scripts/
 | `list_avatars` | (なし) | 使用可能なアバター一覧（ID, 名前, 説明, タグ, 現在のアバター表示）|
 | `change_avatar` | `avatar_id`, `reason` | アバター変更（reason 必須で記録。30分クールダウンあり）|
 | `get_avatar_status` | (なし) | 現在のアバター + クールダウン残り時間 |
+
+**ログ参照ツール:**
+
+| ツール名 | パラメータ | 説明 |
+|---------|-----------|------|
+| `view_messages` | `channel_id?`, `limit?`, `username?`, `keyword?`, `bot_only?` | DB 保存済み会話ログをフィルタ付きで検索（最大50件、content は100文字で truncate） |
+| `view_my_actions` | `channel_id?`, `limit?`, `action?`, `triggered_by?` | bot の行動ログ（bot_actions）を検索（最大30件） |
 
 ### トリアージ LLM レスポンス形式
 
