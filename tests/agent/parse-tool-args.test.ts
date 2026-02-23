@@ -153,40 +153,75 @@ describe("parseAllJsonObjects", () => {
 
 describe("inferToolNameFromArgs", () => {
 	test("entry → save_memory を推定する", () => {
-		expect(inferToolNameFromArgs({ entry: "hello", emotional_impact: 3 })).toBe(
-			"save_memory",
-		);
+		const result = inferToolNameFromArgs({
+			entry: "hello",
+			emotional_impact: 3,
+		});
+		expect(result).not.toBeNull();
+		expect(result?.name).toBe("save_memory");
+		expect(result?.score).toBe(1.0);
 	});
 
 	test("emoji → add_reaction を推定する", () => {
-		expect(inferToolNameFromArgs({ emoji: "👀" })).toBe("add_reaction");
+		const result = inferToolNameFromArgs({ emoji: "👀" });
+		expect(result).not.toBeNull();
+		expect(result?.name).toBe("add_reaction");
 	});
 
 	test("query → web_search を推定する", () => {
-		expect(inferToolNameFromArgs({ query: "test" })).toBe("web_search");
+		const result = inferToolNameFromArgs({ query: "test" });
+		expect(result).not.toBeNull();
+		expect(result?.name).toBe("web_search");
 	});
 
 	test("url → fetch_url を推定する", () => {
-		expect(inferToolNameFromArgs({ url: "https://example.com" })).toBe(
-			"fetch_url",
-		);
+		const result = inferToolNameFromArgs({ url: "https://example.com" });
+		expect(result).not.toBeNull();
+		expect(result?.name).toBe("fetch_url");
 	});
 
 	test("title + description → set_goal を推定する", () => {
-		expect(inferToolNameFromArgs({ title: "goal", description: "desc" })).toBe(
-			"set_goal",
-		);
+		const result = inferToolNameFromArgs({
+			title: "goal",
+			description: "desc",
+		});
+		expect(result).not.toBeNull();
+		expect(result?.name).toBe("set_goal");
 	});
 
 	test("username + note → save_user_note を推定する", () => {
-		expect(inferToolNameFromArgs({ username: "user", note: "note" })).toBe(
-			"save_user_note",
-		);
+		const result = inferToolNameFromArgs({ username: "user", note: "note" });
+		expect(result).not.toBeNull();
+		expect(result?.name).toBe("save_user_note");
 	});
 
 	test("content → send_message を推定する (reply_to_message より優先)", () => {
 		const result = inferToolNameFromArgs({ content: "hello" });
-		expect(result).toBe("send_message");
+		expect(result).not.toBeNull();
+		expect(result?.name).toBe("send_message");
+	});
+
+	test("content + channel_id → send_message を推定する (2キーマッチ)", () => {
+		const result = inferToolNameFromArgs({
+			content: "hello",
+			channel_id: "123",
+		});
+		expect(result).not.toBeNull();
+		expect(result?.name).toBe("send_message");
+		expect(result?.score).toBe(1.0);
+	});
+
+	test("message_id → message_id を持つツールの1つを推定する", () => {
+		const result = inferToolNameFromArgs({ message_id: "123" });
+		expect(result).not.toBeNull();
+		// message_id を持つツールは複数あるが定義順で最初のものが選ばれる
+		const validTools = [
+			"edit_message",
+			"delete_message",
+			"pin_message",
+			"unpin_message",
+		];
+		expect(validTools).toContain(result?.name ?? "");
 	});
 
 	test("空オブジェクト → null を返す", () => {
@@ -195,5 +230,20 @@ describe("inferToolNameFromArgs", () => {
 
 	test("不明なキーのみ → null を返す", () => {
 		expect(inferToolNameFromArgs({ unknown_key: "value" })).toBeNull();
+	});
+
+	test("半数以上不明キー → null を返す (閾値 0.5)", () => {
+		// content は既知だが foo, bar は不明 → score = 1/3 ≈ 0.33 < 0.5
+		expect(
+			inferToolNameFromArgs({ content: "hello", foo: "x", bar: "y" }),
+		).toBeNull();
+	});
+
+	test("スコアが 0.5 以上なら推定する", () => {
+		// content は既知、foo は不明 → score = 1/2 = 0.5
+		const result = inferToolNameFromArgs({ content: "hello", foo: "x" });
+		expect(result).not.toBeNull();
+		expect(result?.name).toBe("send_message");
+		expect(result?.score).toBe(0.5);
 	});
 });

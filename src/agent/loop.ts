@@ -139,8 +139,11 @@ export function parseAllJsonObjects(raw: string): Record<string, unknown>[] {
 						) {
 							objects.push(parsed as Record<string, unknown>);
 						}
-					} catch {
-						// skip invalid JSON fragment
+					} catch (e) {
+						console.warn(
+							`[agent] Skipping invalid JSON fragment: ${objStr.slice(0, 100)}`,
+							e,
+						);
 					}
 					pos = i + 1;
 					found = true;
@@ -510,10 +513,14 @@ ${goalsPrompt ? `\n${goalsPrompt}\n` : ""}
 
 		// 連結 JSON 展開: 1つの tool_call に複数の JSON オブジェクトが
 		// 連結されている場合、各オブジェクトのキーからツール名を推定して
-		// 別々の tool_call として展開する
+		// 別々の tool_call として展開する（最大 MAX_EXPANDED_OBJECTS 個）
+		const MAX_EXPANDED_OBJECTS = 5;
 		const functionToolCalls: typeof rawToolCalls = [];
 		for (const toolCall of rawToolCalls) {
-			const allObjects = parseAllJsonObjects(toolCall.function.arguments);
+			const allObjects = parseAllJsonObjects(toolCall.function.arguments).slice(
+				0,
+				MAX_EXPANDED_OBJECTS,
+			);
 			if (allObjects.length <= 1) {
 				// 単一オブジェクト（または空）: そのまま
 				functionToolCalls.push(toolCall);
@@ -533,19 +540,22 @@ ${goalsPrompt ? `\n${goalsPrompt}\n` : ""}
 				for (let j = 1; j < allObjects.length; j++) {
 					const obj = allObjects[j];
 					if (!obj) continue;
-					const inferredName = inferToolNameFromArgs(obj);
-					if (inferredName) {
+					const inferred = inferToolNameFromArgs(obj);
+					if (inferred) {
 						// NOTE: 合成 ID は OpenAI の call_xxx 形式から外れるが、
 						// aiclient-2-api 経由の Gemini では問題なし
 						functionToolCalls.push({
 							id: `${toolCall.id}_x${j}`,
 							type: "function",
 							function: {
-								name: inferredName,
+								name: inferred.name,
 								arguments: JSON.stringify(obj),
 							},
 						});
-						console.log(`[agent]   → expanded[${j}]: ${inferredName}`, obj);
+						console.log(
+							`[agent]   → expanded[${j}]: ${inferred.name} (score=${inferred.score.toFixed(2)})`,
+							obj,
+						);
 					} else {
 						console.warn(
 							`[agent]   → expanded[${j}]: could not infer tool, skipping`,

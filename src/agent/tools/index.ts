@@ -52,14 +52,21 @@ export function getToolHandler(name: string): ToolHandler | undefined {
 	return handlerMap.get(name);
 }
 
+/** ツール名推定の結果 */
+export interface InferredTool {
+	name: string;
+	score: number;
+}
+
 /**
  * 引数のキーセットからツール名を推定する。
  * 連結 JSON 展開時に、2番目以降のオブジェクトがどのツールに属するかを判定する。
  * allTools の定義順でスキャンし、スコアが同じ場合は先に定義されたツールを優先する。
+ * スコア (マッチ率) が 0.5 未満の場合は推定を諦めて null を返す。
  */
 export function inferToolNameFromArgs(
 	args: Record<string, unknown>,
-): string | null {
+): InferredTool | null {
 	const argKeys = Object.keys(args);
 	if (argKeys.length === 0) return null;
 
@@ -109,6 +116,6 @@ export function inferToolNameFromArgs(
 	}
 
 	// 半数以上のキーがマッチしない場合は推定を諦める
-	if (bestScore < 0.5) return null;
-	return bestMatch;
+	if (bestScore < 0.5 || !bestMatch) return null;
+	return { name: bestMatch, score: bestScore };
 }
