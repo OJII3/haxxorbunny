@@ -11,7 +11,8 @@
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",
 		"db:generate": "drizzle-kit generate",
-		"db:migrate": "drizzle-kit migrate"
+		"db:migrate": "drizzle-kit migrate",
+		"test": "bun test"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.2",
