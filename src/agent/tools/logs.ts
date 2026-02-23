@@ -44,7 +44,8 @@ const viewMessages: ToolHandler = async (args, ctx) => {
 			return `${time} ${bot}${r.username}: ${truncate(r.content)}`;
 		});
 		return ok(lines.join("\n"));
-	} catch {
+	} catch (error) {
+		console.error("[agent/logs] searchMessages error:", error);
 		return fail("Failed to search messages");
 	}
 };
@@ -75,7 +76,8 @@ const viewMyActions: ToolHandler = async (args, ctx) => {
 			return `${time} [${r.action}] via:${r.triggeredBy ?? "?"}${ch}${content}`;
 		});
 		return ok(lines.join("\n"));
-	} catch {
+	} catch (error) {
+		console.error("[agent/logs] searchBotActions error:", error);
 		return fail("Failed to search bot actions");
 	}
 };
