@@ -25,6 +25,55 @@ import type { AgentContext } from "./types.ts";
 
 const MAX_ITERATIONS = 10;
 
+/**
+ * tool_call の arguments をパースする。
+ * LLM が複数の JSON オブジェクトを連結して返すケースに対応し、
+ * 先頭の最初の有効な JSON オブジェクトのみを抽出する。
+ */
+export function parseToolArguments(raw: string): Record<string, unknown> {
+	try {
+		return JSON.parse(raw);
+	} catch {
+		// 連結された JSON の先頭オブジェクトを抽出
+		if (!raw.startsWith("{")) {
+			throw new SyntaxError(`Invalid tool arguments: ${raw}`);
+		}
+
+		// ブレース深度でオブジェクト境界を検出
+		let depth = 0;
+		let inString = false;
+		let escaped = false;
+		for (let i = 0; i < raw.length; i++) {
+			const ch = raw[i];
+			if (escaped) {
+				escaped = false;
+				continue;
+			}
+			if (ch === "\\" && inString) {
+				escaped = true;
+				continue;
+			}
+			if (ch === '"') {
+				inString = !inString;
+				continue;
+			}
+			if (inString) continue;
+			if (ch === "{") depth++;
+			if (ch === "}") {
+				depth--;
+				if (depth === 0) {
+					const firstObj = raw.slice(0, i + 1);
+					console.warn(
+						`[agent] Malformed tool arguments (concatenated JSON), using first object only: ${firstObj}`,
+					);
+					return JSON.parse(firstObj);
+				}
+			}
+		}
+		throw new SyntaxError(`Invalid tool arguments: ${raw}`);
+	}
+}
+
 const _agentBusyMap = new Map<string, boolean>();
 
 export function isAgentBusy(): boolean {
@@ -461,10 +510,8 @@ ${goalsPrompt ? `\n${goalsPrompt}\n` : ""}
 				console.error(`[agent] Unknown tool: ${toolName}`);
 			} else {
 				try {
-					const args = JSON.parse(toolCall.function.arguments) as Record<
-						string,
-						unknown
-					>;
+					const args = parseToolArguments(toolCall.function.arguments);
+
 					console.log(`[agent] Calling tool: ${toolName}`, args);
 					const result = await handler(args, ctx);
 					resultText = result.result;
