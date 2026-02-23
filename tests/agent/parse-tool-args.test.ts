@@ -68,4 +68,15 @@ describe("parseToolArguments", () => {
 	test("プリミティブ値で SyntaxError を投げる", () => {
 		expect(() => parseToolArguments("42")).toThrow(SyntaxError);
 	});
+
+	test("連結 JSON の間にホワイトスペースがある場合も先頭のみ抽出する", () => {
+		const raw = '{"a":1} {"b":2}';
+		const result = parseToolArguments(raw);
+		expect(result).toEqual({ a: 1 });
+	});
+
+	test("Unicode エスケープを含む JSON を正しく処理する", () => {
+		const result = parseToolArguments('{"key":"\\u0041"}');
+		expect(result).toEqual({ key: "A" });
+	});
 });
