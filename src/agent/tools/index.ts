@@ -4,6 +4,7 @@ import { avatarTools } from "./avatar.ts";
 import { discordTools } from "./discord.ts";
 import { goalTools } from "./goals.ts";
 import { heartbeatTools } from "./heartbeat.ts";
+import { logTools } from "./logs.ts";
 import { memoryTools } from "./memory.ts";
 import { voiceTools } from "./voice.ts";
 import { webTools } from "./web.ts";
@@ -16,6 +17,7 @@ const allTools: ToolDefinition[] = [
 	...voiceTools,
 	...heartbeatTools,
 	...avatarTools,
+	...logTools,
 ];
 
 /** 通常モード（テキスト）で使用する tools 定義（voice ツールを除外） */

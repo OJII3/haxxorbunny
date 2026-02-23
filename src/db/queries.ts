@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gt, sql } from "drizzle-orm";
+import { and, count, desc, eq, gt, like, type SQL, sql } from "drizzle-orm";
 import { db } from "./index.ts";
 import { botActions, messages } from "./schema.ts";
 
@@ -67,6 +67,54 @@ export function getLastBotAction(channelId: string) {
 			.limit(1)
 			.all()[0] ?? null
 	);
+}
+
+export function searchMessages(opts: {
+	guildId: string;
+	channelId?: string;
+	username?: string;
+	keyword?: string;
+	botOnly?: boolean;
+	limit?: number;
+}) {
+	const limit = Math.min(opts.limit ?? 20, 50);
+	const conditions: SQL[] = [eq(messages.guildId, opts.guildId)];
+	if (opts.channelId) conditions.push(eq(messages.channelId, opts.channelId));
+	if (opts.username) conditions.push(eq(messages.username, opts.username));
+	if (opts.keyword)
+		conditions.push(like(messages.content, `%${opts.keyword}%`));
+	if (opts.botOnly) conditions.push(eq(messages.isBot, true));
+	return db
+		.select()
+		.from(messages)
+		.where(and(...conditions))
+		.orderBy(desc(messages.createdAt))
+		.limit(limit)
+		.all()
+		.reverse();
+}
+
+export function searchBotActions(opts: {
+	guildId: string;
+	channelId?: string;
+	action?: string;
+	triggeredBy?: string;
+	limit?: number;
+}) {
+	const limit = Math.min(opts.limit ?? 10, 30);
+	const conditions: SQL[] = [eq(botActions.guildId, opts.guildId)];
+	if (opts.channelId) conditions.push(eq(botActions.channelId, opts.channelId));
+	if (opts.action) conditions.push(eq(botActions.action, opts.action));
+	if (opts.triggeredBy)
+		conditions.push(eq(botActions.triggeredBy, opts.triggeredBy));
+	return db
+		.select()
+		.from(botActions)
+		.where(and(...conditions))
+		.orderBy(desc(botActions.createdAt))
+		.limit(limit)
+		.all()
+		.reverse();
 }
 
 export function getActiveChannelIds(guildId?: string, limit = 5): string[] {
