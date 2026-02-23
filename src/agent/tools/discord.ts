@@ -50,7 +50,7 @@ const sendMessage: ToolHandler = async (args, ctx) => {
 	}
 
 	if (!targetChannel.isSendable()) return fail("Channel is not sendable");
-	await targetChannel.send(content);
+	await targetChannel.send({ content, allowedMentions: { parse: [] } });
 	recordMessage(ctx.guild.id, content);
 	saveMessage({
 		guildId: ctx.guild.id,
@@ -68,7 +68,7 @@ const replyToMessage: ToolHandler = async (args, ctx) => {
 	const content = args.content as string;
 	if (!content) return fail("content is required");
 	if (!ctx.triggerMessage) return fail("No trigger message to reply to");
-	await ctx.triggerMessage.reply(content);
+	await ctx.triggerMessage.reply({ content, allowedMentions: { parse: [] } });
 	saveMessage({
 		guildId: ctx.guild.id,
 		channelId: ctx.channel.id,
@@ -101,7 +101,7 @@ const editMessage: ToolHandler = async (args, ctx) => {
 		const msg = await ctx.channel.messages.fetch(messageId);
 		if (msg.author.id !== botUserId())
 			return fail("Can only edit own messages");
-		await msg.edit(content);
+		await msg.edit({ content, allowedMentions: { parse: [] } });
 		return ok("Message edited");
 	} catch {
 		return fail("Failed to edit message");
