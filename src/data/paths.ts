@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 
-const DATA_DIR = join(import.meta.dir, "../../data");
+const DATA_DIR = process.env.DATA_DIR ?? join(import.meta.dir, "../../data");
 
 export function guildDataDir(guildId: string): string {
 	const dir = join(DATA_DIR, "guilds", guildId);
