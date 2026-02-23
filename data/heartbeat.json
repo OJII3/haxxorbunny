@@ -13,7 +13,7 @@
 		{
 			"id": "channel_patrol",
 			"description": "チャンネルを巡回して未参加の会話に反応する",
-			"interval_minutes": 30,
+			"interval_minutes": 180,
 			"enabled": true
 		},
 		{
