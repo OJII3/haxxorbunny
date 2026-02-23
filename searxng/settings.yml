@@ -2,7 +2,8 @@ use_default_settings: true
 
 server:
   bind_address: "0.0.0.0"
-  secret_key: "haxxorbunny-searxng-secret-key"
+  secret_key: "3c7ae6a03d63ce2fece3fe0e543ca8522aab531e020709b94bf702c4cde621dc"
+  limiter: false
 
 search:
   formats:

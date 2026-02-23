@@ -37,6 +37,8 @@ Main branch: `main`
 ├── flake.nix             # Nix Flake 開発環境定義
 ├── package.json          # 依存関係 + npm scripts
 ├── tsconfig.json         # TypeScript コンパイラ設定
+searxng/
+└── settings.yml          # SearXNG 検索エンジン設定（JSON フォーマット有効化等）
 src/
 ├── index.ts              # エントリポイント
 ├── client.ts             # Discord Client (GuildMembers intent 含む)
