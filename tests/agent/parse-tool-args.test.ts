@@ -56,4 +56,16 @@ describe("parseToolArguments", () => {
 	test("閉じブレースがない不完全な JSON で SyntaxError を投げる", () => {
 		expect(() => parseToolArguments('{"key":"value"')).toThrow(SyntaxError);
 	});
+
+	test("配列の JSON で SyntaxError を投げる", () => {
+		expect(() => parseToolArguments("[1,2,3]")).toThrow(SyntaxError);
+	});
+
+	test("null で SyntaxError を投げる", () => {
+		expect(() => parseToolArguments("null")).toThrow(SyntaxError);
+	});
+
+	test("プリミティブ値で SyntaxError を投げる", () => {
+		expect(() => parseToolArguments("42")).toThrow(SyntaxError);
+	});
 });

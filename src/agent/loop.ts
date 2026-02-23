@@ -28,12 +28,31 @@ const MAX_ITERATIONS = 10;
 /**
  * tool_call の arguments をパースする。
  * LLM が複数の JSON オブジェクトを連結して返すケースに対応し、
- * 先頭の最初の有効な JSON オブジェクトのみを抽出する。
+ * 先頭の有効な JSON オブジェクトのみを抽出する。
  */
 export function parseToolArguments(raw: string): Record<string, unknown> {
+	const validate = (parsed: unknown): Record<string, unknown> => {
+		if (
+			typeof parsed !== "object" ||
+			parsed === null ||
+			Array.isArray(parsed)
+		) {
+			throw new SyntaxError(
+				`Invalid tool arguments: expected object, got ${typeof parsed}`,
+			);
+		}
+		return parsed as Record<string, unknown>;
+	};
+
 	try {
-		return JSON.parse(raw);
-	} catch {
+		return validate(JSON.parse(raw));
+	} catch (e) {
+		if (
+			e instanceof SyntaxError &&
+			e.message.startsWith("Invalid tool arguments:")
+		) {
+			throw e;
+		}
 		// 連結された JSON の先頭オブジェクトを抽出
 		if (!raw.startsWith("{")) {
 			throw new SyntaxError(`Invalid tool arguments: ${raw}`);
@@ -64,9 +83,9 @@ export function parseToolArguments(raw: string): Record<string, unknown> {
 				if (depth === 0) {
 					const firstObj = raw.slice(0, i + 1);
 					console.warn(
-						`[agent] Malformed tool arguments (concatenated JSON), using first object only: ${firstObj}`,
+						`[agent] Malformed tool arguments (concatenated JSON), using first object only. raw=${raw.slice(0, 500)}`,
 					);
-					return JSON.parse(firstObj);
+					return validate(JSON.parse(firstObj));
 				}
 			}
 		}
