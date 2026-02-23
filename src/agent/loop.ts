@@ -20,7 +20,12 @@ import {
 	markChannelResponded,
 	unlockChannel,
 } from "../llm/triage-throttle.ts";
-import { getToolHandler, toolSpecs, voiceToolSpecs } from "./tools/index.ts";
+import {
+	getToolHandler,
+	inferToolNameFromArgs,
+	toolSpecs,
+	voiceToolSpecs,
+} from "./tools/index.ts";
 import type { AgentContext } from "./types.ts";
 
 const MAX_ITERATIONS = 10;
@@ -91,6 +96,89 @@ export function parseToolArguments(raw: string): Record<string, unknown> {
 		}
 		throw new SyntaxError(`Invalid tool arguments: ${raw}`);
 	}
+}
+
+/**
+ * 連結 JSON 文字列から全 JSON オブジェクトを抽出する。
+ * 正常な単一 JSON はそのまま 1 要素の配列として返す。
+ */
+export function parseAllJsonObjects(raw: string): Record<string, unknown>[] {
+	// まず通常のパースを試す
+	try {
+		const parsed = JSON.parse(raw);
+		if (
+			typeof parsed === "object" &&
+			parsed !== null &&
+			!Array.isArray(parsed)
+		) {
+			return [parsed as Record<string, unknown>];
+		}
+		return [];
+	} catch {
+		// 連結 JSON の可能性 → フォールバック
+	}
+
+	if (!raw.startsWith("{")) return [];
+
+	const objects: Record<string, unknown>[] = [];
+	let pos = 0;
+
+	while (pos < raw.length) {
+		// 次の '{' を探す
+		while (pos < raw.length && raw[pos] !== "{") pos++;
+		if (pos >= raw.length) break;
+
+		// ブレース深度でオブジェクト境界を検出
+		let depth = 0;
+		let inString = false;
+		let escaped = false;
+		const start = pos;
+		let found = false;
+
+		for (let i = start; i < raw.length; i++) {
+			const ch = raw[i];
+			if (escaped) {
+				escaped = false;
+				continue;
+			}
+			if (ch === "\\" && inString) {
+				escaped = true;
+				continue;
+			}
+			if (ch === '"') {
+				inString = !inString;
+				continue;
+			}
+			if (inString) continue;
+			if (ch === "{") depth++;
+			if (ch === "}") {
+				depth--;
+				if (depth === 0) {
+					const objStr = raw.slice(start, i + 1);
+					try {
+						const parsed = JSON.parse(objStr);
+						if (
+							typeof parsed === "object" &&
+							parsed !== null &&
+							!Array.isArray(parsed)
+						) {
+							objects.push(parsed as Record<string, unknown>);
+						}
+					} catch {
+						// skip invalid JSON fragment
+					}
+					pos = i + 1;
+					found = true;
+					break;
+				}
+			}
+		}
+
+		// depth が 0 に戻らなかった場合は終了
+		if (!found) break;
+	}
+
+	return objects;
 }
 
 const _agentBusyMap = new Map<string, boolean>();
@@ -435,7 +523,7 @@ ${goalsPrompt ? `\n${goalsPrompt}\n` : ""}
 		);
 
 		// function tool_calls のみフィルタリング（custom tool は無視）
-		const functionToolCalls =
+		const rawToolCalls =
 			assistantMessage.tool_calls?.filter(
 				(
 					tc,
@@ -444,6 +532,52 @@ ${goalsPrompt ? `\n${goalsPrompt}\n` : ""}
 					function: { name: string; arguments: string };
 				} => tc.type === "function",
 			) ?? [];
+
+		// 連結 JSON 展開: 1つの tool_call に複数の JSON オブジェクトが
+		// 連結されている場合、各オブジェクトのキーからツール名を推定して
+		// 別々の tool_call として展開する
+		const functionToolCalls: typeof rawToolCalls = [];
+		for (const toolCall of rawToolCalls) {
+			const allObjects = parseAllJsonObjects(toolCall.function.arguments);
+			if (allObjects.length <= 1) {
+				// 単一オブジェクト（または空）: そのまま
+				functionToolCalls.push(toolCall);
+			} else {
+				console.log(
+					`[agent] Expanding concatenated JSON: ${allObjects.length} objects in tool_call "${toolCall.function.name}"`,
+				);
+				// 1つ目: 宣言されたツール名を使用
+				functionToolCalls.push({
+					...toolCall,
+					function: {
+						...toolCall.function,
+						arguments: JSON.stringify(allObjects[0]),
+					},
+				});
+				// 2つ目以降: キーからツール名を推定
+				for (let j = 1; j < allObjects.length; j++) {
+					const obj = allObjects[j];
+					if (!obj) continue;
+					const inferredName = inferToolNameFromArgs(obj);
+					if (inferredName) {
+						functionToolCalls.push({
+							id: `${toolCall.id}_x${j}`,
+							type: "function",
+							function: {
+								name: inferredName,
+								arguments: JSON.stringify(obj),
+							},
+						});
+						console.log(`[agent]   → expanded[${j}]: ${inferredName}`, obj);
+					} else {
+						console.warn(
+							`[agent]   → expanded[${j}]: could not infer tool, skipping`,
+							obj,
+						);
+					}
+				}
+			}
+		}
 
 		// アシスタントメッセージを履歴に追加
 		messages.push({

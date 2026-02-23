@@ -51,3 +51,62 @@ const handlerMap = new Map<string, ToolHandler>(
 export function getToolHandler(name: string): ToolHandler | undefined {
 	return handlerMap.get(name);
 }
+
+/**
+ * 引数のキーセットからツール名を推定する。
+ * 連結 JSON 展開時に、2番目以降のオブジェクトがどのツールに属するかを判定する。
+ * allTools の定義順でスキャンし、スコアが同じ場合は先に定義されたツールを優先する。
+ */
+export function inferToolNameFromArgs(
+	args: Record<string, unknown>,
+): string | null {
+	const argKeys = Object.keys(args);
+	if (argKeys.length === 0) return null;
+
+	let bestMatch: string | null = null;
+	let bestScore = 0;
+	let bestRequiredMatch = 0;
+
+	for (const tool of allTools) {
+		const name = tool.spec.function.name;
+		const params = tool.spec.function.parameters as
+			| {
+					type: "object";
+					properties?: Record<string, unknown>;
+					required?: string[];
+			  }
+			| undefined;
+		if (!params?.properties) continue;
+
+		const toolParamKeys = new Set(Object.keys(params.properties));
+		const requiredKeys = params.required ?? [];
+
+		// 引数キーのうちツールパラメータに含まれるものの数
+		let matchCount = 0;
+		for (const key of argKeys) {
+			if (toolParamKeys.has(key)) matchCount++;
+		}
+		if (matchCount === 0) continue;
+
+		// スコア: マッチ率 (全キーが一致 = 1.0)
+		const score = matchCount / argKeys.length;
+
+		// required パラメータの充足数
+		let requiredMatch = 0;
+		for (const rk of requiredKeys) {
+			if (rk in args) requiredMatch++;
+		}
+
+		// より高いスコア、または同スコアで required 充足度が高い方を優先
+		if (
+			score > bestScore ||
+			(score === bestScore && requiredMatch > bestRequiredMatch)
+		) {
+			bestScore = score;
+			bestMatch = name;
+			bestRequiredMatch = requiredMatch;
+		}
+	}
+
+	return bestMatch;
+}
