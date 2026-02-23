@@ -20,7 +20,12 @@ import {
 	markChannelResponded,
 	unlockChannel,
 } from "../llm/triage-throttle.ts";
-import { getToolHandler, toolSpecs, voiceToolSpecs } from "./tools/index.ts";
+import {
+	getToolHandler,
+	inferToolNameFromArgs,
+	toolSpecs,
+	voiceToolSpecs,
+} from "./tools/index.ts";
 import type { AgentContext } from "./types.ts";
 
 const MAX_ITERATIONS = 10;
@@ -29,6 +34,7 @@ const MAX_ITERATIONS = 10;
  * tool_call の arguments をパースする。
  * LLM が複数の JSON オブジェクトを連結して返すケースに対応し、
  * 先頭の有効な JSON オブジェクトのみを抽出する。
+ * （連結 JSON の全展開はエージェントループ側で parseAllJsonObjects を使用）
  */
 export function parseToolArguments(raw: string): Record<string, unknown> {
 	const validate = (parsed: unknown): Record<string, unknown> => {
@@ -53,16 +59,58 @@ export function parseToolArguments(raw: string): Record<string, unknown> {
 		) {
 			throw e;
 		}
-		// 連結された JSON の先頭オブジェクトを抽出
-		if (!raw.startsWith("{")) {
-			throw new SyntaxError(`Invalid tool arguments: ${raw}`);
+		// 連結 JSON フォールバック: parseAllJsonObjects に委譲
+		const objects = parseAllJsonObjects(raw);
+		if (objects.length > 0 && objects[0]) {
+			if (objects.length > 1) {
+				console.warn(
+					`[agent] Malformed tool arguments (concatenated JSON), using first object only. raw=${raw.slice(0, 500)}`,
+				);
+			}
+			return validate(objects[0]);
 		}
+		throw new SyntaxError(`Invalid tool arguments: ${raw}`);
+	}
+}
+
+/**
+ * 連結 JSON 文字列から全 JSON オブジェクトを抽出する。
+ * 正常な単一 JSON はそのまま 1 要素の配列として返す。
+ */
+export function parseAllJsonObjects(raw: string): Record<string, unknown>[] {
+	// まず通常のパースを試す
+	try {
+		const parsed = JSON.parse(raw);
+		if (
+			typeof parsed === "object" &&
+			parsed !== null &&
+			!Array.isArray(parsed)
+		) {
+			return [parsed as Record<string, unknown>];
+		}
+		return [];
+	} catch {
+		// 連結 JSON の可能性 → フォールバック
+	}
+
+	if (!raw.startsWith("{")) return [];
+
+	const objects: Record<string, unknown>[] = [];
+	let pos = 0;
+
+	while (pos < raw.length) {
+		// 次の '{' を探す
+		while (pos < raw.length && raw[pos] !== "{") pos++;
+		if (pos >= raw.length) break;
 
 		// ブレース深度でオブジェクト境界を検出
 		let depth = 0;
 		let inString = false;
 		let escaped = false;
-		for (let i = 0; i < raw.length; i++) {
+		const start = pos;
+		let found = false;
+
+		for (let i = start; i < raw.length; i++) {
 			const ch = raw[i];
 			if (escaped) {
 				escaped = false;
@@ -81,16 +129,34 @@ export function parseToolArguments(raw: string): Record<string, unknown> {
 			if (ch === "}") {
 				depth--;
 				if (depth === 0) {
-					const firstObj = raw.slice(0, i + 1);
-					console.warn(
-						`[agent] Malformed tool arguments (concatenated JSON), using first object only. raw=${raw.slice(0, 500)}`,
-					);
-					return validate(JSON.parse(firstObj));
+					const objStr = raw.slice(start, i + 1);
+					try {
+						const parsed = JSON.parse(objStr);
+						if (
+							typeof parsed === "object" &&
+							parsed !== null &&
+							!Array.isArray(parsed)
+						) {
+							objects.push(parsed as Record<string, unknown>);
+						}
+					} catch (e) {
+						console.warn(
+							`[agent] Skipping invalid JSON fragment: ${objStr.slice(0, 100)}`,
+							e,
+						);
+					}
+					pos = i + 1;
+					found = true;
+					break;
 				}
 			}
 		}
-		throw new SyntaxError(`Invalid tool arguments: ${raw}`);
+
+		// depth が 0 に戻らなかった場合は終了
+		if (!found) break;
 	}
+
+	return objects;
 }
 
 const _agentBusyMap = new Map<string, boolean>();
@@ -435,7 +501,7 @@ ${goalsPrompt ? `\n${goalsPrompt}\n` : ""}
 		);
 
 		// function tool_calls のみフィルタリング（custom tool は無視）
-		const functionToolCalls =
+		const rawToolCalls =
 			assistantMessage.tool_calls?.filter(
 				(
 					tc,
@@ -444,6 +510,61 @@ ${goalsPrompt ? `\n${goalsPrompt}\n` : ""}
 					function: { name: string; arguments: string };
 				} => tc.type === "function",
 			) ?? [];
+
+		// 連結 JSON 展開: 1つの tool_call に複数の JSON オブジェクトが
+		// 連結されている場合、各オブジェクトのキーからツール名を推定して
+		// 別々の tool_call として展開する（最大 MAX_EXPANDED_OBJECTS 個）
+		const MAX_EXPANDED_OBJECTS = 5;
+		const functionToolCalls: typeof rawToolCalls = [];
+		for (const toolCall of rawToolCalls) {
+			const allObjects = parseAllJsonObjects(toolCall.function.arguments).slice(
+				0,
+				MAX_EXPANDED_OBJECTS,
+			);
+			if (allObjects.length <= 1) {
+				// 単一オブジェクト（または空）: そのまま
+				functionToolCalls.push(toolCall);
+			} else {
+				console.log(
+					`[agent] Expanding concatenated JSON: ${allObjects.length} objects in tool_call "${toolCall.function.name}"`,
+				);
+				// 1つ目: 宣言されたツール名を使用
+				functionToolCalls.push({
+					...toolCall,
+					function: {
+						...toolCall.function,
+						arguments: JSON.stringify(allObjects[0]),
+					},
+				});
+				// 2つ目以降: キーからツール名を推定
+				for (let j = 1; j < allObjects.length; j++) {
+					const obj = allObjects[j];
+					if (!obj) continue;
+					const inferred = inferToolNameFromArgs(obj);
+					if (inferred) {
+						// NOTE: 合成 ID は OpenAI の call_xxx 形式から外れるが、
+						// aiclient-2-api 経由の Gemini では問題なし
+						functionToolCalls.push({
+							id: `${toolCall.id}_x${j}`,
+							type: "function",
+							function: {
+								name: inferred.name,
+								arguments: JSON.stringify(obj),
+							},
+						});
+						console.log(
+							`[agent]   → expanded[${j}]: ${inferred.name} (score=${inferred.score.toFixed(2)})`,
+							obj,
+						);
+					} else {
+						console.warn(
+							`[agent]   → expanded[${j}]: could not infer tool, skipping`,
+							obj,
+						);
+					}
+				}
+			}
+		}
 
 		// アシスタントメッセージを履歴に追加
 		messages.push({
