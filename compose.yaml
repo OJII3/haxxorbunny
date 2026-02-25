@@ -7,20 +7,6 @@ services:
     env_file: .env
     volumes:
       - bot-data:/app/data
-    depends_on:
-      - aiclient
-    restart: unless-stopped
-
-  aiclient:
-    image: justlikemaki/aiclient-2-api
-    container_name: haxxorbunny-aiclient
-    ports:
-      - "3001:3000"
-      - "8085:8085"
-      - "8086:8086"
-    volumes:
-      - aiclient-configs:/app/configs
-      - ${HOME}/.gemini:/root/.gemini:ro
     restart: unless-stopped
 
   searxng:
@@ -58,5 +44,4 @@ services:
 
 volumes:
   bot-data:
-  aiclient-configs:
   whisper-models:

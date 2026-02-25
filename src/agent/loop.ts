@@ -230,7 +230,7 @@ async function _runAgentLoopInner(ctx: AgentContext): Promise<void> {
 
 async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 	const guildId = ctx.guild.id;
-	const personality = loadPersonality(guildId);
+	const personality = loadPersonality();
 	const personalityPrompt = personalityToPrompt(personality);
 	const memory = loadMemory(guildId);
 	const memoryPrompt = memoryToPrompt(memory);

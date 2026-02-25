@@ -115,7 +115,7 @@ ${conversationContext || "(なし)"}
 			if (result.personality_update.interests) {
 				update.interests = result.personality_update.interests;
 			}
-			updatePersonality(guildId, update);
+			updatePersonality(update);
 			console.log("[reflection/personality] Updated:", update);
 		}
 

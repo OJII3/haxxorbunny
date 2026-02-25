@@ -1,6 +1,6 @@
 # haxxorbunny
 
-Discord に住む自律的エージェント bot。LLM (aiclient-2-api 経由 Gemini) を使い、Tool-Use（関数呼び出し）方式で自律的に行動する。
+Discord に住む自律的エージェント bot。LLM (Gemini API OpenAI 互換エンドポイント) を使い、Tool-Use（関数呼び出し）方式で自律的に行動する。
 
 Main branch: `main`
 
@@ -9,7 +9,7 @@ Main branch: `main`
 - Runtime: Bun
 - 言語: TypeScript (strict)
 - Discord: discord.js v14
-- LLM: OpenAI SDK → aiclient-2-api (OpenAI 互換エンドポイント)
+- LLM: OpenAI SDK → Gemini API (OpenAI 互換エンドポイント直接呼び出し)
 - Voice: @discordjs/voice + opusscript (純JS Opus)
 - STT: whisper.cpp サーバー (Docker)
 - TTS: VOICEVOX Engine (Docker)
@@ -98,12 +98,11 @@ src/
     └── queries.ts        # クエリヘルパー
 data/
 ├── heartbeat.json        # HEARTBEAT: グローバル定期タスク設定
-├── personality.json      # レガシー (migrate-to-guild.ts で guilds/ に移行)
+├── personality.json      # PERSONALITY: グローバル人格設定 (bot が自己更新可能、全ギルド共有)
 ├── memory.json           # レガシー (同上)
 ├── goals.json            # レガシー (同上)
 ├── guilds/               # ギルドごとのデータ (移行後に自動作成)
 │   └── {guildId}/
-│       ├── personality.json  # SOUL: 可変プロンプト (bot が自己更新可能)
 │       ├── memory.json       # MEMORY: 長期記憶 (bot が自動更新)
 │       ├── goals.json        # GOALS: ゴール管理 (bot が自己更新可能)
 │       └── memory/           # 日次記憶蒸留
@@ -299,17 +298,17 @@ cron (2時間) — 低頻度タスク
 - **メンション記憶強化**: メンション（直接の呼びかけ）による指示・依頼は忘れにくくする。AgentContext に `isMentioned` を伝播し、①システムプロンプトで save_memory を促す、②emotional_impact の最低値を 3 にフロアリング。30日後のスコアが impact=2 の ~0.425 → impact=3 の ~0.500 以上に改善
 - **自律的スケジュール調整**: bot が `get_posting_schedule` / `update_posting_schedule` ツールで独り言（autonomous_post）の頻度を自分で調整可能。気分や状況に応じて有効/無効の切り替えや間隔（1440〜10080分 = 1日〜1週間）の変更ができる
 - **自律的プロフィール画像変更**: bot が `list_avatars` / `change_avatar` / `get_avatar_status` ツールでプロフィール画像を自律的に変更可能。30分のクールダウンで頻繁な変更を防止。変更履歴（直近20件）を記録。画像は `data/avatars/` に配置し `manifest.json` で管理
-- **LLM ストリーミング応答**: エージェントループの LLM 呼び出しは `stream: true` + `max_tokens: 2048` で動作。チャンクから content と tool_calls を index ベースで蓄積・組み立て。aiclient-2-api のバッファリング遅延を回避し TTFB を改善。ストリームエラー・空レスポンス・max_tokens 途中切れのガード付き
+- **LLM ストリーミング応答**: エージェントループの LLM 呼び出しは `stream: true` + `max_tokens: 2048` で動作。チャンクから content と tool_calls を index ベースで蓄積・組み立て。ストリームエラー・空レスポンス・max_tokens 途中切れのガード付き
 - **連結 JSON 展開**: LLM が tool_call の arguments に複数の JSON オブジェクトを連結して返すケース（`{...}{...}`）に対応。`parseAllJsonObjects` が全オブジェクトを抽出し、`inferToolNameFromArgs` が各オブジェクトの引数キーからツール定義をスコアリングしてツール名を推定。エージェントループで個別の tool_call として展開・実行する。`parseToolArguments` は安全弁として先頭オブジェクトのみ返すフォールバックを維持
 - **メンション禁止（多層防御）**: bot が他のユーザーを `<@userId>` 形式でメンションしないよう、プロンプト（SOUL/SURFACE/IDENTITY の3層）で指示 + コードレベルで `allowedMentions: { parse: [] }` を全メッセージ送信（send/reply/edit）に適用。LLM がプロンプトを無視した場合でも Discord API レベルでメンションが無効化される
 
 ### ギルドごとのデータ分離
 
-personality.json / memory.json / goals.json はギルド（Discord サーバー）ごとに `data/guilds/{guildId}/` に保存され、各サーバーで独立したパーソナリティ・記憶・ゴールを維持する。
+memory.json / goals.json はギルド（Discord サーバー）ごとに `data/guilds/{guildId}/` に保存され、各サーバーで独立した記憶・ゴールを維持する。personality.json は `data/personality.json` にグローバルで保存され、全ギルドで共有される。
 
 | 項目 | スコープ | 理由 |
 |------|---------|------|
-| personality.json | ギルドごと | サーバーごとに独立した人格 |
+| personality.json | グローバル | 全サーバーで共有の人格 |
 | memory.json | ギルドごと | サーバーごとに独立した記憶 |
 | goals.json | ギルドごと | サーバーごとに独立した目標 |
 | heartbeat.json | グローバル | タスクスケジュールはボット全体の設定 |
@@ -319,7 +318,7 @@ personality.json / memory.json / goals.json はギルド（Discord サーバー�
 | message-dedup | guildId をハッシュに含む | ギルド間で同じ発言を許可 |
 | DB (messages, bot_actions) | guild_id カラム | ギルド限定クエリに対応 |
 
-**移行**: 既存データは `bun run scripts/migrate-to-guild.ts <guildId>` で移行可能。
+**移行**: memory.json / goals.json は `bun run scripts/migrate-to-guild.ts <guildId>` で移行可能（personality.json はグローバルのため移行対象外）。
 
 ### DB テーブル
 
@@ -328,7 +327,7 @@ personality.json / memory.json / goals.json はギルド（Discord サーバー�
 
 ## 環境変数
 
-`.env.example` 参照。必須: `DISCORD_TOKEN`, `DISCORD_APP_ID`
+`.env.example` 参照。必須: `DISCORD_TOKEN`, `DISCORD_APP_ID`, `GEMINI_API_KEY`
 
 ## デプロイ（Podman Compose / ローカル）
 
@@ -336,7 +335,7 @@ personality.json / memory.json / goals.json はギルド（Discord サーバー�
 
 - `podman` & `podman-compose` がインストール済み
 - `.env` ファイルがプロジェクトルートに存在（`.env.example` を参照して作成）
-- `~/.gemini/` に Gemini 認証情報（`oauth_creds.json` 等）が存在
+- Google AI Studio の API キー（`GEMINI_API_KEY`）を `.env` に設定
 - Discord Developer Portal で `GuildMembers` Privileged Intent を有効化
 - ボイスチャット使用時: VOICEVOX Engine と whisper.cpp サーバーが起動済み（compose.yaml で自動起動）
 
@@ -354,7 +353,6 @@ podman-compose down && podman-compose up --build -d
 
 # ログ確認
 podman logs haxxorbunny          # bot
-podman logs haxxorbunny-aiclient # LLM API
 
 # ステータス確認
 podman-compose ps
@@ -365,7 +363,6 @@ podman-compose ps
 | サービス | コンテナ名 | 説明 |
 |---------|-----------|------|
 | bot | haxxorbunny | Discord bot 本体 (Bun) |
-| aiclient | haxxorbunny-aiclient | LLM API (aiclient-2-api, Gemini) |
 | searxng | haxxorbunny-searxng | Web検索エンジン (SearXNG) |
 | voicevox | haxxorbunny-voicevox | TTS Engine (VOICEVOX, CPU) |
 | whisper | haxxorbunny-whisper | STT Server (whisper.cpp, small model) |
@@ -373,7 +370,6 @@ podman-compose ps
 ### データ永続化
 
 - `bot-data` ボリューム → `/app/data`（SQLite DB, heartbeat.json, guilds/{guildId}/personality.json, memory.json, goals.json, memory/）
-- `aiclient-configs` ボリューム → aiclient 設定
 
 ## コーディング規約
 

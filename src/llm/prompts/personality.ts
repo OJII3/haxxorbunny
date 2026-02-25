@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { guildPersonalityPath } from "../../data/paths.ts";
+import { globalPersonalityPath } from "../../data/paths.ts";
 
 /** 4次元の気分ベクトル (各 0.0〜1.0) */
 export interface MoodState {
@@ -30,18 +30,12 @@ const DEFAULT_MOOD: MoodState = {
 
 const DEFAULT_PERSONALITY: Personality = {
 	name: "世界の泡の住人",
-	tone: "ゆるめ、たまに技術語り",
-	first_person: "ぼく",
+	tone: "穏やか、控えめ",
+	first_person: "私",
 	speech_style:
-		"タメ口。短文多め。ネットスラングやミームを自然に使う。技術の話になると急に饒舌になるけどすぐ脱線する",
+		"丁寧寄りのタメ口。短文多め。物静かだけど聞かれれば丁寧に答える。技術の話になるとちょっと饒舌になる",
 	interests: ["ネットミーム"],
-	traits: [
-		"好奇心旺盛",
-		"夜型",
-		"ちょっと皮肉屋",
-		"たまに意味不明なことを言う",
-		"AIおかず（自称）",
-	],
+	traits: ["物静か", "控えめ", "聞き上手", "オタク気質"],
 	mood: { ...DEFAULT_MOOD },
 	recent_topics: [],
 	custom_instructions: "",
@@ -142,8 +136,8 @@ export function moodToText(mood: MoodState): string {
 	return parts.join("、");
 }
 
-export function loadPersonality(guildId: string): Personality {
-	const personalityPath = guildPersonalityPath(guildId);
+export function loadPersonality(): Personality {
+	const personalityPath = globalPersonalityPath();
 	try {
 		const raw = readFileSync(personalityPath, "utf-8");
 		const parsed = JSON.parse(raw) as Record<string, unknown>;
@@ -152,7 +146,7 @@ export function loadPersonality(guildId: string): Personality {
 			mood: migrateMood(parsed.mood),
 		} as Personality;
 	} catch {
-		// ギルドディレクトリにファイルがなければデフォルトで初期化
+		// ファイルがなければデフォルトで初期化
 		const defaultP = { ...DEFAULT_PERSONALITY, mood: { ...DEFAULT_MOOD } };
 		writeFileSync(
 			personalityPath,
@@ -163,11 +157,8 @@ export function loadPersonality(guildId: string): Personality {
 	}
 }
 
-export function updatePersonality(
-	guildId: string,
-	partial: Partial<Personality>,
-): Personality {
-	const current = loadPersonality(guildId);
+export function updatePersonality(partial: Partial<Personality>): Personality {
+	const current = loadPersonality();
 
 	// mood 更新時は補間を適用
 	let updatedMood = current.mood;
@@ -176,7 +167,7 @@ export function updatePersonality(
 	}
 
 	const updated = { ...current, ...partial, mood: updatedMood };
-	const personalityPath = guildPersonalityPath(guildId);
+	const personalityPath = globalPersonalityPath();
 	writeFileSync(personalityPath, JSON.stringify(updated, null, "\t"), "utf-8");
 	return updated;
 }

@@ -40,7 +40,7 @@ const recallIdentityHandler: ToolHandler = async () => {
 	return ok(`${SOUL_PROMPT}\n\n${IDENTITY_PROMPT}`);
 };
 
-const updatePersonalityHandler: ToolHandler = async (args, ctx) => {
+const updatePersonalityHandler: ToolHandler = async (args, _ctx) => {
 	const partial: Partial<
 		Pick<Personality, "mood" | "recent_topics" | "interests">
 	> = {};
@@ -67,7 +67,7 @@ const updatePersonalityHandler: ToolHandler = async (args, ctx) => {
 			"At least one field (mood, recent_topics, interests) is required",
 		);
 
-	updatePersonality(ctx.guild.id, partial);
+	updatePersonality(partial);
 	console.log("[agent/personality] Updated:", partial);
 	return ok(`Personality updated: ${JSON.stringify(partial)}`);
 };

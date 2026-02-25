@@ -1,7 +1,10 @@
 import { afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { memoryTools } from "../../src/agent/tools/memory.ts";
-import { guildMemoryPath, guildPersonalityPath } from "../../src/data/paths.ts";
+import {
+	globalPersonalityPath,
+	guildMemoryPath,
+} from "../../src/data/paths.ts";
 import { IDENTITY_PROMPT, SOUL_PROMPT } from "../../src/llm/prompts/system.ts";
 import { createMockContext } from "../helpers/mock-context.ts";
 import { createTestTables } from "../helpers/test-db.ts";
@@ -23,7 +26,7 @@ afterEach(() => {
 	// ギルドデータをクリーンアップ
 	const memPath = guildMemoryPath(GUILD_ID);
 	if (existsSync(memPath)) rmSync(memPath);
-	const persPath = guildPersonalityPath(GUILD_ID);
+	const persPath = globalPersonalityPath();
 	if (existsSync(persPath)) rmSync(persPath);
 });
 
@@ -136,7 +139,7 @@ describe("update_personality", () => {
 		);
 		expect(result.success).toBe(true);
 
-		const raw = readFileSync(guildPersonalityPath(GUILD_ID), "utf-8");
+		const raw = readFileSync(globalPersonalityPath(), "utf-8");
 		const personality = JSON.parse(raw);
 		// 補間が適用されるため元の値とは少し異なる
 		expect(personality.mood.energy).toBeGreaterThan(0.5);

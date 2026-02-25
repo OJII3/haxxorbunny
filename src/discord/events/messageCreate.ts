@@ -134,7 +134,7 @@ async function processBufferedMessages(
 	}
 
 	try {
-		const personality = loadPersonality(guildId);
+		const personality = loadPersonality();
 		const triageResult = await triage(
 			channelId,
 			combinedContent,
