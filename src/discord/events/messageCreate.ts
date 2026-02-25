@@ -121,8 +121,10 @@ async function processBufferedMessages(
 	const channelId = lastMessage.channelId;
 	const authorName = lastMessage.author.displayName;
 
-	// 結合コンテンツ（複数メッセージを改行で結合）
-	const combinedContent = messages.map((m) => m.content).join("\n");
+	// 結合コンテンツ（複数メッセージを改行で結合、画像情報をテキスト追記）
+	const combinedContent = messages
+		.map((m) => appendImageInfo(m.content, m))
+		.join("\n");
 
 	console.log(
 		`[buffer] flushing ${messages.length} message(s) from ${authorName} in ${channelId}`,
@@ -188,14 +190,24 @@ setFlushHandler((messages, hasMention) => {
 	);
 });
 
+/** 画像 attachment の情報をテキストとして追記する */
+function appendImageInfo(content: string, message: Message): string {
+	const imageAttachments = [...message.attachments.values()].filter((a) =>
+		a.contentType?.startsWith("image/"),
+	);
+	if (imageAttachments.length === 0) return content;
+	const tags = imageAttachments.map((a) => `[画像: ${a.name}]`).join(" ");
+	return content ? `${content} ${tags}` : tags;
+}
+
 export async function handleMessageCreate(message: Message): Promise<void> {
-	// すべてのメッセージを DB に保存
+	// すべてのメッセージを DB に保存（画像情報をテキスト追記）
 	saveMessage({
 		guildId: message.guildId ?? "",
 		channelId: message.channelId,
 		userId: message.author.id,
 		username: message.author.displayName,
-		content: message.content,
+		content: appendImageInfo(message.content, message),
 		isBot: message.author.bot,
 	});
 

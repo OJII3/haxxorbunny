@@ -1,4 +1,5 @@
 import type { Message } from "discord.js";
+import type { ChatCompletionContentPart } from "openai/resources/chat/completions";
 import { client } from "../client.ts";
 import { config } from "../config.ts";
 import {
@@ -182,16 +183,49 @@ export function hasRecentActivity(minutes = 5): boolean {
 	return Date.now() - _lastActivityAt < minutes * 60 * 1000;
 }
 
+const IMAGE_CONTENT_TYPES = new Set([
+	"image/png",
+	"image/jpeg",
+	"image/gif",
+	"image/webp",
+]);
+const MAX_IMAGES_PER_MESSAGE = 4;
+
+/** Discord Message から画像 attachment を抽出し、OpenAI の image_url パーツ配列を返す */
+function extractImageParts(msg: Message): ChatCompletionContentPart[] {
+	const parts: ChatCompletionContentPart[] = [];
+	for (const attachment of msg.attachments.values()) {
+		if (parts.length >= MAX_IMAGES_PER_MESSAGE) break;
+		if (
+			attachment.contentType &&
+			IMAGE_CONTENT_TYPES.has(attachment.contentType)
+		) {
+			parts.push({
+				type: "image_url",
+				image_url: { url: attachment.url, detail: "low" },
+			});
+		}
+	}
+	return parts;
+}
+
 interface ConversationMessage {
 	role: "user" | "assistant";
-	content: string;
+	content: string | ChatCompletionContentPart[];
 }
 
 function buildConversationHistory(messages: Message[]): ConversationMessage[] {
-	return messages.map((msg) => ({
-		role: (msg.author.bot ? "assistant" : "user") as "user" | "assistant",
-		content: `[${msg.author.displayName}]: ${msg.content}`,
-	}));
+	return messages.map((msg) => {
+		const text = `[${msg.author.displayName}]: ${msg.content}`;
+		const imageParts = extractImageParts(msg);
+		return {
+			role: (msg.author.bot ? "assistant" : "user") as "user" | "assistant",
+			content:
+				imageParts.length > 0
+					? [{ type: "text" as const, text }, ...imageParts]
+					: text,
+		};
+	});
 }
 
 /** エージェントループ本体 */
@@ -241,7 +275,7 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 	// 会話履歴を構築
 	const messages: Array<{
 		role: "system" | "user" | "assistant" | "tool";
-		content: string | null;
+		content: string | ChatCompletionContentPart[] | null;
 		tool_calls?: Array<{
 			id: string;
 			type: "function";
@@ -289,9 +323,14 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 		for (const msg of history) {
 			messages.push(msg);
 		}
+		const triggerText = `[${ctx.triggerMessage.author.displayName}]: ${ctx.triggerMessage.content}`;
+		const triggerImageParts = extractImageParts(ctx.triggerMessage);
 		messages.push({
 			role: "user",
-			content: `[${ctx.triggerMessage.author.displayName}]: ${ctx.triggerMessage.content}`,
+			content:
+				triggerImageParts.length > 0
+					? [{ type: "text" as const, text: triggerText }, ...triggerImageParts]
+					: triggerText,
 		});
 		if (ctx.isMentioned) {
 			messages.push({
