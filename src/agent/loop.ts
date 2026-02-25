@@ -650,7 +650,7 @@ ${goalsPrompt ? `\n${goalsPrompt}\n` : ""}
 			let textContent = assistantMessage.content?.trim();
 			// LLM が会話履歴の [name]: フォーマットを真似してプレフィックスを付けるケースを除去
 			if (textContent) {
-				textContent = textContent.replace(/^\[.+?\]:\s*/, "");
+				textContent = textContent.replace(/^\[[^\]]+\]:\s*/, "").trim();
 			}
 			if (
 				textContent &&
@@ -670,7 +670,10 @@ ${goalsPrompt ? `\n${goalsPrompt}\n` : ""}
 						textContent.slice(0, 100),
 					);
 					try {
-						await ctx.channel.send(textContent);
+						await ctx.channel.send({
+							content: textContent,
+							allowedMentions: { parse: [] },
+						});
 						recordMessage(guildId, textContent);
 						saveMessage({
 							guildId,
