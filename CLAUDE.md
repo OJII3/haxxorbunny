@@ -144,6 +144,7 @@ scripts/
 | `fetch_messages` | `channel_id?`, `limit?` | メッセージ履歴取得 |
 | `get_channel_info` | `channel_id?` | チャンネル情報取得 |
 | `get_user_info` | `user_id` | ユーザー情報取得 |
+| `search_members` | `query`, `limit?` | ユーザー名でメンバー検索（部分一致、最大25件） |
 | `list_channels` | (なし) | サーバーのチャンネル一覧 |
 | `set_typing` | (なし) | 入力中表示 |
 | `do_nothing` | `reasoning` | 何もしない（理由を記録） |

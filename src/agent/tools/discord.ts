@@ -232,6 +232,25 @@ const getUserInfo: ToolHandler = async (args, ctx) => {
 	}
 };
 
+const searchMembers: ToolHandler = async (args, ctx) => {
+	const query = args.query as string;
+	if (!query) return fail("query is required");
+	const limit = Math.min((args.limit as number | undefined) ?? 10, 25);
+	try {
+		const members = await ctx.guild.members.search({ query, limit });
+		if (members.size === 0) return ok("No members found");
+		const results = members.map((m) => ({
+			id: m.id,
+			username: m.user.username,
+			displayName: m.displayName,
+			bot: m.user.bot,
+		}));
+		return ok(JSON.stringify(results));
+	} catch {
+		return fail("Failed to search members");
+	}
+};
+
 const listChannels: ToolHandler = async (_args, ctx) => {
 	const channels = ctx.guild.channels.cache
 		.filter((ch) => ch.isTextBased())
@@ -514,6 +533,31 @@ export const discordTools: ToolDefinition[] = [
 			},
 		},
 		handler: getUserInfo,
+	},
+	{
+		spec: {
+			type: "function",
+			function: {
+				name: "search_members",
+				description:
+					"ユーザー名（username / displayName）でギルドメンバーを検索する。名前から userId を調べたいときに使う",
+				parameters: {
+					type: "object",
+					properties: {
+						query: {
+							type: "string",
+							description: "検索するユーザー名（部分一致）",
+						},
+						limit: {
+							type: "number",
+							description: "取得する最大件数（デフォルト10、最大25）",
+						},
+					},
+					required: ["query"],
+				},
+			},
+		},
+		handler: searchMembers,
 	},
 	{
 		spec: {
