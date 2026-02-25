@@ -168,10 +168,11 @@ describe("inferToolNameFromArgs", () => {
 		expect(result?.name).toBe("add_reaction");
 	});
 
-	test("query → web_search を推定する", () => {
+	test("query → search_members または web_search を推定する（定義順で search_members が優先）", () => {
 		const result = inferToolNameFromArgs({ query: "test" });
 		expect(result).not.toBeNull();
-		expect(result?.name).toBe("web_search");
+		// query のみだと search_members と web_search が同スコア。allTools の定義順で search_members が先
+		expect(result?.name).toBe("search_members");
 	});
 
 	test("url → fetch_url を推定する", () => {
