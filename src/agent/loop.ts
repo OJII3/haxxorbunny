@@ -183,13 +183,13 @@ export function hasRecentActivity(minutes = 5): boolean {
 	return Date.now() - _lastActivityAt < minutes * 60 * 1000;
 }
 
-const IMAGE_CONTENT_TYPES = new Set([
+export const IMAGE_CONTENT_TYPES = new Set([
 	"image/png",
 	"image/jpeg",
 	"image/gif",
 	"image/webp",
 ]);
-const MAX_IMAGES_PER_MESSAGE = 4;
+export const MAX_IMAGES_PER_MESSAGE = 4;
 
 /** Discord Message から画像 attachment を抽出し、OpenAI の image_url パーツ配列を返す */
 function extractImageParts(msg: Message): ChatCompletionContentPart[] {
@@ -217,7 +217,8 @@ interface ConversationMessage {
 function buildConversationHistory(messages: Message[]): ConversationMessage[] {
 	return messages.map((msg) => {
 		const text = `[${msg.author.displayName}]: ${msg.content}`;
-		const imageParts = extractImageParts(msg);
+		// assistant ロールに image_url パーツは非対応のため、bot メッセージでは画像を除外
+		const imageParts = msg.author.bot ? [] : extractImageParts(msg);
 		return {
 			role: (msg.author.bot ? "assistant" : "user") as "user" | "assistant",
 			content:
