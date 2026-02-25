@@ -168,9 +168,11 @@ describe("inferToolNameFromArgs", () => {
 		expect(result?.name).toBe("add_reaction");
 	});
 
-	test("query → web_search を推定する", () => {
+	test("query → web_search を推定する（パラメータ数が少ない特化ツールを優先）", () => {
 		const result = inferToolNameFromArgs({ query: "test" });
 		expect(result).not.toBeNull();
+		// query のみだと search_members(2params) と web_search(1param) が同スコア。
+		// パラメータ数が少ない web_search が優先される
 		expect(result?.name).toBe("web_search");
 	});
 
@@ -195,10 +197,12 @@ describe("inferToolNameFromArgs", () => {
 		expect(result?.name).toBe("save_user_note");
 	});
 
-	test("content → send_message を推定する (reply_to_message より優先)", () => {
+	test("content → reply_to_message を推定する（パラメータ数が少ない特化ツールを優先）", () => {
 		const result = inferToolNameFromArgs({ content: "hello" });
 		expect(result).not.toBeNull();
-		expect(result?.name).toBe("send_message");
+		// content のみだと send_message(2params) と reply_to_message(1param) が同スコア。
+		// パラメータ数が少ない reply_to_message が優先される
+		expect(result?.name).toBe("reply_to_message");
 	});
 
 	test("content + channel_id → send_message を推定する (2キーマッチ)", () => {
@@ -243,7 +247,8 @@ describe("inferToolNameFromArgs", () => {
 		// content は既知、foo は不明 → score = 1/2 = 0.5
 		const result = inferToolNameFromArgs({ content: "hello", foo: "x" });
 		expect(result).not.toBeNull();
-		expect(result?.name).toBe("send_message");
+		// reply_to_message(1param) が send_message(2params) より優先
+		expect(result?.name).toBe("reply_to_message");
 		expect(result?.score).toBe(0.5);
 	});
 });

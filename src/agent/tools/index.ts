@@ -61,8 +61,9 @@ export interface InferredTool {
 /**
  * 引数のキーセットからツール名を推定する。
  * 連結 JSON 展開時に、2番目以降のオブジェクトがどのツールに属するかを判定する。
- * allTools の定義順でスキャンし、スコアが同じ場合は先に定義されたツールを優先する。
  * スコア (マッチ率) が 0.5 未満の場合は推定を諦めて null を返す。
+ *
+ * 優先順位: スコア > required 充足数 > パラメータ数が少ない（より特化した）ツール
  */
 export function inferToolNameFromArgs(
 	args: Record<string, unknown>,
@@ -73,6 +74,7 @@ export function inferToolNameFromArgs(
 	let bestMatch: string | null = null;
 	let bestScore = 0;
 	let bestRequiredMatch = 0;
+	let bestParamCount = Number.POSITIVE_INFINITY;
 
 	for (const tool of allTools) {
 		const name = tool.spec.function.name;
@@ -104,14 +106,20 @@ export function inferToolNameFromArgs(
 			if (rk in args) requiredMatch++;
 		}
 
-		// より高いスコア、または同スコアで required 充足度が高い方を優先
+		const paramCount = toolParamKeys.size;
+
+		// より高いスコア → required 充足度 → パラメータ数が少ない（特化）ツールを優先
 		if (
 			score > bestScore ||
-			(score === bestScore && requiredMatch > bestRequiredMatch)
+			(score === bestScore && requiredMatch > bestRequiredMatch) ||
+			(score === bestScore &&
+				requiredMatch === bestRequiredMatch &&
+				paramCount < bestParamCount)
 		) {
 			bestScore = score;
 			bestMatch = name;
 			bestRequiredMatch = requiredMatch;
+			bestParamCount = paramCount;
 		}
 	}
 
