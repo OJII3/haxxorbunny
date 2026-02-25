@@ -1,6 +1,7 @@
 import { config } from "../config.ts";
 import {
-	appendMemoryEntry,
+	appendGlobalMemoryEntry,
+	loadGlobalMemory,
 	loadMemory,
 	normalizeEntry,
 	saveMemory,
@@ -17,11 +18,12 @@ interface DreamResult {
 const DREAM_SYSTEM_PROMPT = `
 あなたは "世界の泡の住人" の夢処理エンジンです。
 "世界の泡の住人" の長期記憶全体を受け取り、"夢"のように自由に連想・分析してください。
+サーバー固有の記憶と全サーバー共通のグローバル記憶の両方を材料にします。
 
 以下を行ってください:
-1. 記憶同士の意外な関連性を見つける（connections）
-2. 新しい洞察や気づきを生み出す（insights） — これは [dream] タグ付き記憶として保存される
-3. 古くて不要な記憶を忘れる提案をする（forget_indices）
+1. 記憶同士の意外な関連性を見つける（connections）— サーバー記憶とグローバル記憶の間の関連も含む
+2. 新しい洞察や気づきを生み出す（insights） — これは [dream] タグ付きグローバル記憶として保存される
+3. サーバー記憶から古くて不要な記憶を忘れる提案をする（forget_indices）
 4. 夢の物語を短く生成する（dream_narrative） — ログ用
 
 ## 応答フォーマット
@@ -35,14 +37,15 @@ const DREAM_SYSTEM_PROMPT = `
 
 注意:
 - insights は最大3つまで。本当に面白い洞察だけ
-- forget_indices は本当に不要なものだけ。慎重に
+- forget_indices はサーバー記憶のインデックスのみ（グローバル記憶は対象外）。本当に不要なものだけ。慎重に
 - 夢なのでクリエイティブに。意外な組み合わせを楽しんで
 `.trim();
 
 export async function processDream(guildId: string): Promise<void> {
 	const memory = loadMemory(guildId);
+	const globalMemory = loadGlobalMemory();
 
-	if (memory.entries.length < 5) {
+	if (memory.entries.length + globalMemory.entries.length < 5) {
 		console.log("[dream] Not enough memories to dream about, skipping");
 		return;
 	}
@@ -54,9 +57,22 @@ export async function processDream(guildId: string): Promise<void> {
 		})
 		.join("\n");
 
+	const globalMemoryList =
+		globalMemory.entries.length > 0
+			? globalMemory.entries
+					.map((e, i) => {
+						const entry = normalizeEntry(e);
+						return `[G${i}] ${entry.text} (impact=${entry.emotional_impact})`;
+					})
+					.join("\n")
+			: "(なし)";
+
 	const context = `
-## 長期記憶 (${memory.entries.length}件)
-${memoryList}
+## サーバー記憶 (${memory.entries.length}件)
+${memoryList || "(なし)"}
+
+## グローバル記憶 (${globalMemory.entries.length}件)
+${globalMemoryList}
 `.trim();
 
 	try {
@@ -102,16 +118,16 @@ ${memoryList}
 			}
 		}
 
-		// insights を [dream] タグ付き記憶として追加
+		// insights を [dream] タグ付きグローバル記憶として追加
 		for (const insight of result.insights.slice(0, 3)) {
 			const dreamEntry = `[dream] ${insight}`;
 			if (dreamEntry.length <= 30) {
-				await appendMemoryEntry(guildId, dreamEntry, 3);
+				await appendGlobalMemoryEntry(dreamEntry, 3);
 			} else {
 				// 30文字制限は dream タグを含めて超える場合がある
-				await appendMemoryEntry(guildId, dreamEntry.slice(0, 30), 3);
+				await appendGlobalMemoryEntry(dreamEntry.slice(0, 30), 3);
 			}
-			console.log(`[dream] Insight saved: ${insight}`);
+			console.log(`[dream] Insight saved to global: ${insight}`);
 		}
 
 		// connections はログ出力のみ

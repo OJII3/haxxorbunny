@@ -31,6 +31,10 @@ export function guildDailyMemoryDir(guildId: string): string {
 	return dir;
 }
 
+export function globalMemoryPath(): string {
+	return join(DATA_DIR, "global-memory.json");
+}
+
 export function avatarDir(): string {
 	const dir = join(DATA_DIR, "avatars");
 	if (!existsSync(dir)) {

@@ -9,7 +9,7 @@ import {
 } from "../db/queries.ts";
 import { llm } from "../llm/client.ts";
 import { goalsToPrompt } from "../llm/goals.ts";
-import { loadMemory, memoryToPrompt } from "../llm/memory.ts";
+import { loadGlobalMemory, loadMemory, memoryToPrompt } from "../llm/memory.ts";
 import { isDuplicate, recordMessage } from "../llm/message-dedup.ts";
 import {
 	loadPersonality,
@@ -272,7 +272,8 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 	const personality = loadPersonality();
 	const personalityPrompt = personalityToPrompt(personality);
 	const memory = loadMemory(guildId);
-	const memoryPrompt = memoryToPrompt(memory);
+	const globalMemory = loadGlobalMemory();
+	const memoryPrompt = memoryToPrompt(memory, globalMemory);
 
 	// 軽量構成: SURFACE → personality → memory (詳細は recall_identity ツールで参照)
 	const systemPrompt = `${SURFACE_PROMPT}\n\n${personalityPrompt}\n${memoryPrompt}`;

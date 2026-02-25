@@ -1,4 +1,8 @@
-import { addUserNote, appendMemoryEntry } from "../../llm/memory.ts";
+import {
+	addUserNote,
+	appendGlobalMemoryEntry,
+	appendMemoryEntry,
+} from "../../llm/memory.ts";
 import {
 	type MoodState,
 	type Personality,
@@ -19,10 +23,15 @@ const saveMemoryHandler: ToolHandler = async (args, ctx) => {
 	const entry = args.entry as string;
 	if (!entry) return fail("entry is required");
 	if (entry.length > 30) return fail("entry must be 30 characters or less");
+	const scope = (args.scope as string | undefined) ?? "guild";
 	let emotionalImpact = (args.emotional_impact as number | undefined) ?? 2;
 	// メンション由来の記憶は最低 impact=3（忘れにくくする）
 	if (ctx.isMentioned && emotionalImpact < 3) {
 		emotionalImpact = 3;
+	}
+	if (scope === "global") {
+		await appendGlobalMemoryEntry(entry, emotionalImpact);
+		return ok(`Global memory saved (impact=${emotionalImpact}): ${entry}`);
 	}
 	await appendMemoryEntry(ctx.guild.id, entry, emotionalImpact);
 	return ok(`Memory saved (impact=${emotionalImpact}): ${entry}`);
@@ -106,6 +115,12 @@ export const memoryTools: ToolDefinition[] = [
 							type: "number",
 							description:
 								"感情的インパクト (1=些細, 2=普通, 3=やや印象的, 4=印象的, 5=非常に印象的)。省略時は2",
+						},
+						scope: {
+							type: "string",
+							enum: ["guild", "global"],
+							description:
+								"記憶の範囲。guild=このサーバーのみ（デフォルト）、global=全サーバー共通",
 						},
 					},
 					required: ["entry"],

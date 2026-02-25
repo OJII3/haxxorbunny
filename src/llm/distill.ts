@@ -1,5 +1,6 @@
 import { config } from "../config.ts";
 import {
+	appendGlobalMemoryEntry,
 	loadDailyMemory,
 	loadMemory,
 	type MemoryEntry,
@@ -12,6 +13,7 @@ import { triageLlm } from "./triage-client.ts";
 interface DistillResult {
 	summary: string;
 	promote_to_long_term: string[];
+	promote_to_global: string[];
 	remove_indices: number[];
 	reasoning: string;
 }
@@ -21,14 +23,24 @@ const DISTILL_SYSTEM_PROMPT = `
 日次の記憶エントリを受け取り、以下を行ってください:
 
 1. 日次サマリーを1文で生成
-2. 長期記憶に昇格すべきエントリを選定
+2. 長期記憶に昇格すべきエントリを分類:
+   - promote_to_long_term: このサーバー固有の記憶（ユーザーに関すること、サーバー内の出来事、ローカルな文脈）
+   - promote_to_global: 全サーバー共通の記憶（一般知識、技術的な学び、自分自身の気づき、普遍的な洞察）
 3. 長期記憶から削除すべき古い/不要なエントリのインデックス番号を選定
+
+## 分類ガイドライン
+- ユーザー名を含む → promote_to_long_term（サーバー固有）
+- サーバー内のイベント・出来事 → promote_to_long_term（サーバー固有）
+- 技術知識・一般的な学び → promote_to_global（全サーバー共通）
+- 自分の性格や傾向に関する気づき → promote_to_global（全サーバー共通）
+- 迷ったらサーバー固有（promote_to_long_term）にする
 
 ## 応答フォーマット
 必ず以下の JSON のみを返してください:
 {
   "summary": "今日のサマリー（1文）",
-  "promote_to_long_term": ["長期記憶に追加すべきエントリ"],
+  "promote_to_long_term": ["サーバー固有の長期記憶に追加すべきエントリ"],
+  "promote_to_global": ["全サーバー共通の記憶に追加すべきエントリ"],
   "remove_indices": [0, 3, 5],
   "reasoning": "判定理由（短く）"
 }
@@ -128,6 +140,16 @@ ${longTermList}
 		if (result.promote_to_long_term.length > 0) {
 			console.log(
 				`[distill] Promoted ${result.promote_to_long_term.length} entries to long-term memory`,
+			);
+		}
+
+		// グローバルメモリに昇格
+		if (result.promote_to_global?.length > 0) {
+			for (const entry of result.promote_to_global) {
+				await appendGlobalMemoryEntry(entry, 3);
+			}
+			console.log(
+				`[distill] Promoted ${result.promote_to_global.length} entries to global memory`,
 			);
 		}
 

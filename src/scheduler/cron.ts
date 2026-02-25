@@ -13,6 +13,7 @@ import {
 	markTaskExecuted,
 	shouldRunTask,
 } from "../llm/heartbeat.ts";
+import { trimGlobalMemory } from "../llm/memory.ts";
 
 function selectChannel(guild: Guild): TextChannel | undefined {
 	const activeIds = getActiveChannelIds(guild.id);
@@ -166,6 +167,7 @@ async function runInfrequentTasks(): Promise<void> {
 					for (const guild of client.guilds.cache.values()) {
 						await distillDailyMemory(guild.id);
 					}
+					trimGlobalMemory();
 					break;
 				case "cleanup_old_memory":
 					for (const guild of client.guilds.cache.values()) {
