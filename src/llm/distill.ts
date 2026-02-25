@@ -13,7 +13,7 @@ import { triageLlm } from "./triage-client.ts";
 interface DistillResult {
 	summary: string;
 	promote_to_long_term: string[];
-	promote_to_global: string[];
+	promote_to_global?: string[];
 	remove_indices: number[];
 	reasoning: string;
 }
@@ -144,12 +144,13 @@ ${longTermList}
 		}
 
 		// グローバルメモリに昇格
-		if (result.promote_to_global?.length > 0) {
-			for (const entry of result.promote_to_global) {
+		const promoteToGlobal = result.promote_to_global ?? [];
+		if (promoteToGlobal.length > 0) {
+			for (const entry of promoteToGlobal) {
 				await appendGlobalMemoryEntry(entry, 3);
 			}
 			console.log(
-				`[distill] Promoted ${result.promote_to_global.length} entries to global memory`,
+				`[distill] Promoted ${promoteToGlobal.length} entries to global memory`,
 			);
 		}
 

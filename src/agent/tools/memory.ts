@@ -24,6 +24,8 @@ const saveMemoryHandler: ToolHandler = async (args, ctx) => {
 	if (!entry) return fail("entry is required");
 	if (entry.length > 30) return fail("entry must be 30 characters or less");
 	const scope = (args.scope as string | undefined) ?? "guild";
+	if (scope !== "guild" && scope !== "global")
+		return fail("scope must be 'guild' or 'global'");
 	let emotionalImpact = (args.emotional_impact as number | undefined) ?? 2;
 	// メンション由来の記憶は最低 impact=3（忘れにくくする）
 	if (ctx.isMentioned && emotionalImpact < 3) {

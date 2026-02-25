@@ -167,10 +167,10 @@ export function trimGlobalMemory(): void {
 	const memory = loadGlobalMemory();
 	if (memory.entries.length <= GLOBAL_MAX_ENTRIES) return;
 	const scored = memory.entries
-		.map((e) => ({
-			entry: normalizeEntry(e),
-			score: computeRecallScore(normalizeEntry(e)),
-		}))
+		.map((e) => {
+			const entry = normalizeEntry(e);
+			return { entry, score: computeRecallScore(entry) };
+		})
 		.sort((a, b) => b.score - a.score);
 	memory.entries = scored.slice(0, GLOBAL_MAX_ENTRIES).map((s) => s.entry);
 	saveGlobalMemory(memory);

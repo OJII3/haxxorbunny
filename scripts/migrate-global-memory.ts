@@ -14,10 +14,14 @@
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import OpenAI from "openai";
-
-const DATA_DIR = join(import.meta.dir, "../data");
+import { globalMemoryPath, guildMemoryPath } from "../src/data/paths.ts";
+import {
+	type GlobalMemory,
+	type Memory,
+	type MemoryEntry,
+	normalizeEntry,
+} from "../src/llm/memory.ts";
 
 const guildId = process.argv[2];
 const dryRun = process.argv.includes("--dry-run");
@@ -43,23 +47,6 @@ const model = process.env.TRIAGE_MODEL ?? "gemini-2.5-flash";
 
 const llm = new OpenAI({ baseURL: baseUrl, apiKey });
 
-interface MemoryEntry {
-	text: string;
-	emotional_impact: number;
-	created_at: string;
-}
-
-interface Memory {
-	entries: (string | MemoryEntry)[];
-	user_notes: Record<string, string[]>;
-	last_updated: string;
-}
-
-interface GlobalMemory {
-	entries: MemoryEntry[];
-	last_updated: string;
-}
-
 interface ClassifyResult {
 	classifications: Array<{
 		index: number;
@@ -68,19 +55,8 @@ interface ClassifyResult {
 	}>;
 }
 
-function normalizeEntry(raw: string | MemoryEntry): MemoryEntry {
-	if (typeof raw === "string") {
-		return {
-			text: raw,
-			emotional_impact: 2,
-			created_at: new Date().toISOString(),
-		};
-	}
-	return raw;
-}
-
 // ギルドメモリ読み込み
-const memoryPath = join(DATA_DIR, "guilds", guildId, "memory.json");
+const memoryPath = guildMemoryPath(guildId);
 let memory: Memory;
 try {
 	memory = JSON.parse(readFileSync(memoryPath, "utf-8")) as Memory;
@@ -157,9 +133,9 @@ try {
 		[];
 
 	for (const c of result.classifications) {
-		const raw = memory.entries[c.index];
-		if (!raw) continue;
-		const entry = normalizeEntry(raw);
+		const rawEntry = memory.entries[c.index];
+		if (!rawEntry) continue;
+		const entry = normalizeEntry(rawEntry);
 		if (c.scope === "global") {
 			globalEntries.push(entry);
 			console.log(`  [GLOBAL] [${c.index}] ${entry.text} — ${c.reason}`);
@@ -185,12 +161,10 @@ try {
 	}
 
 	// global-memory.json に追加
-	const globalMemoryPath = join(DATA_DIR, "global-memory.json");
+	const gmPath = globalMemoryPath();
 	let globalMemory: GlobalMemory;
 	try {
-		globalMemory = JSON.parse(
-			readFileSync(globalMemoryPath, "utf-8"),
-		) as GlobalMemory;
+		globalMemory = JSON.parse(readFileSync(gmPath, "utf-8")) as GlobalMemory;
 	} catch {
 		globalMemory = { entries: [], last_updated: "" };
 	}
@@ -203,11 +177,7 @@ try {
 	}
 
 	globalMemory.last_updated = new Date().toISOString();
-	writeFileSync(
-		globalMemoryPath,
-		JSON.stringify(globalMemory, null, "\t"),
-		"utf-8",
-	);
+	writeFileSync(gmPath, JSON.stringify(globalMemory, null, "\t"), "utf-8");
 
 	console.log(
 		`[migrate] Added ${globalEntries.length} entries to global-memory.json (total: ${globalMemory.entries.length})`,
