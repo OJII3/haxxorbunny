@@ -17,7 +17,7 @@ export const config = {
 			process.env.LLM_API_BASE_URL ??
 			"https://generativelanguage.googleapis.com/v1beta/openai/",
 		apiKey: requiredEnv("GEMINI_API_KEY"),
-		model: process.env.LLM_MODEL ?? "gemini-2.5-flash",
+		model: process.env.LLM_MODEL ?? "gemini-3.0-flash",
 	},
 	triage: {
 		baseUrl:
@@ -25,7 +25,7 @@ export const config = {
 			process.env.LLM_API_BASE_URL ??
 			"https://generativelanguage.googleapis.com/v1beta/openai/",
 		apiKey: process.env.TRIAGE_API_KEY ?? requiredEnv("GEMINI_API_KEY"),
-		model: process.env.TRIAGE_MODEL ?? "gemini-2.5-flash",
+		model: process.env.TRIAGE_MODEL ?? "gemini-3.0-flash",
 		throttleMs: Number(process.env.TRIAGE_THROTTLE_MS ?? "10000"),
 		responseCooldownMs: Number(
 			process.env.TRIAGE_RESPONSE_COOLDOWN_MS ?? "15000",

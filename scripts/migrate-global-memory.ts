@@ -43,7 +43,7 @@ const baseUrl =
 	process.env.TRIAGE_API_BASE_URL ??
 	process.env.LLM_API_BASE_URL ??
 	"https://generativelanguage.googleapis.com/v1beta/openai/";
-const model = process.env.TRIAGE_MODEL ?? "gemini-2.5-flash";
+const model = process.env.TRIAGE_MODEL ?? "gemini-3.0-flash";
 
 const llm = new OpenAI({ baseURL: baseUrl, apiKey });
 
