@@ -5,13 +5,14 @@
  *   bun run scripts/migrate-to-guild.ts <guildId>
  *
  * 動作:
- *   1. data/personality.json → data/guilds/{guildId}/personality.json にコピー
- *   2. data/memory.json → data/guilds/{guildId}/memory.json にコピー
- *   3. data/goals.json → data/guilds/{guildId}/goals.json にコピー
- *   4. data/memory/*.json → data/guilds/{guildId}/memory/ にコピー
- *   5. DB: UPDATE messages SET guild_id = ? WHERE guild_id = ''
- *   6. DB: UPDATE bot_actions SET guild_id = ? WHERE guild_id = ''
- *   7. 元ファイルを data/_backup/ に移動
+ *   1. data/memory.json → data/guilds/{guildId}/memory.json にコピー
+ *   2. data/goals.json → data/guilds/{guildId}/goals.json にコピー
+ *   3. data/memory/*.json → data/guilds/{guildId}/memory/ にコピー
+ *   4. DB: UPDATE messages SET guild_id = ? WHERE guild_id = ''
+ *   5. DB: UPDATE bot_actions SET guild_id = ? WHERE guild_id = ''
+ *   6. 元ファイルを data/_backup/ に移動
+ *
+ * 注意: personality.json はグローバル共有のため移行対象外
  */
 
 import { Database } from "bun:sqlite";
@@ -46,23 +47,7 @@ const backupDir = join(DATA_DIR, "_backup");
 mkdirSync(backupDir, { recursive: true });
 const backupMemoryDir = join(backupDir, "memory");
 
-// 1. personality.json
-const personalityPath = join(DATA_DIR, "personality.json");
-if (existsSync(personalityPath)) {
-	const dest = join(guildDir, "personality.json");
-	if (!existsSync(dest)) {
-		copyFileSync(personalityPath, dest);
-		console.log(`[migrate] Copied personality.json → guilds/${guildId}/`);
-	} else {
-		console.log(
-			`[migrate] Skipped personality.json (already exists in guild dir)`,
-		);
-	}
-} else {
-	console.log("[migrate] personality.json not found, skipping");
-}
-
-// 2. memory.json
+// 1. memory.json
 const memoryPath = join(DATA_DIR, "memory.json");
 if (existsSync(memoryPath)) {
 	const dest = join(guildDir, "memory.json");
@@ -76,7 +61,7 @@ if (existsSync(memoryPath)) {
 	console.log("[migrate] memory.json not found, skipping");
 }
 
-// 3. goals.json
+// 2. goals.json
 const goalsPath = join(DATA_DIR, "goals.json");
 if (existsSync(goalsPath)) {
 	const dest = join(guildDir, "goals.json");
@@ -90,7 +75,7 @@ if (existsSync(goalsPath)) {
 	console.log("[migrate] goals.json not found, skipping");
 }
 
-// 4. data/memory/*.json → data/guilds/{guildId}/memory/
+// 3. data/memory/*.json → data/guilds/{guildId}/memory/
 const dailyMemoryDir = join(DATA_DIR, "memory");
 if (existsSync(dailyMemoryDir)) {
 	const files = readdirSync(dailyMemoryDir).filter((f) => f.endsWith(".json"));
@@ -109,7 +94,7 @@ if (existsSync(dailyMemoryDir)) {
 	console.log("[migrate] data/memory/ not found, skipping");
 }
 
-// 5. DB: guild_id を更新
+// 4. DB: guild_id を更新
 if (existsSync(DB_PATH)) {
 	const sqlite = new Database(DB_PATH);
 
@@ -134,11 +119,7 @@ if (existsSync(DB_PATH)) {
 	console.log("[migrate] Database not found, skipping DB migration");
 }
 
-// 6. 元ファイルをバックアップに移動
-if (existsSync(personalityPath)) {
-	renameSync(personalityPath, join(backupDir, "personality.json"));
-	console.log("[migrate] Moved personality.json → _backup/");
-}
+// 5. 元ファイルをバックアップに移動
 if (existsSync(memoryPath)) {
 	renameSync(memoryPath, join(backupDir, "memory.json"));
 	console.log("[migrate] Moved memory.json → _backup/");

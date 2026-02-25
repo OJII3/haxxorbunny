@@ -318,7 +318,7 @@ memory.json / goals.json はギルド（Discord サーバー）ごとに `data/g
 | message-dedup | guildId をハッシュに含む | ギルド間で同じ発言を許可 |
 | DB (messages, bot_actions) | guild_id カラム | ギルド限定クエリに対応 |
 
-**移行**: 既存データは `bun run scripts/migrate-to-guild.ts <guildId>` で移行可能。
+**移行**: memory.json / goals.json は `bun run scripts/migrate-to-guild.ts <guildId>` で移行可能（personality.json はグローバルのため移行対象外）。
 
 ### DB テーブル
 
