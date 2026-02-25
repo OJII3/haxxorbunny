@@ -647,7 +647,11 @@ ${goalsPrompt ? `\n${goalsPrompt}\n` : ""}
 		// ツール呼び出しがなければ、テキストを send_message で送信（reply ではなく）
 		// voice モード時はフォールバック送信しない（voice_reply ツール経由で話すべき）
 		if (functionToolCalls.length === 0) {
-			const textContent = assistantMessage.content?.trim();
+			let textContent = assistantMessage.content?.trim();
+			// LLM が会話履歴の [name]: フォーマットを真似してプレフィックスを付けるケースを除去
+			if (textContent) {
+				textContent = textContent.replace(/^\[.+?\]:\s*/, "");
+			}
 			if (
 				textContent &&
 				!messageSent &&
