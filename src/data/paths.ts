@@ -15,8 +15,8 @@ export function guildMemoryPath(guildId: string): string {
 	return join(guildDataDir(guildId), "memory.json");
 }
 
-export function guildPersonalityPath(guildId: string): string {
-	return join(guildDataDir(guildId), "personality.json");
+export function globalPersonalityPath(): string {
+	return join(DATA_DIR, "personality.json");
 }
 
 export function guildGoalsPath(guildId: string): string {

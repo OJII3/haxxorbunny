@@ -98,12 +98,11 @@ src/
     └── queries.ts        # クエリヘルパー
 data/
 ├── heartbeat.json        # HEARTBEAT: グローバル定期タスク設定
-├── personality.json      # レガシー (migrate-to-guild.ts で guilds/ に移行)
+├── personality.json      # PERSONALITY: グローバル人格設定 (bot が自己更新可能、全ギルド共有)
 ├── memory.json           # レガシー (同上)
 ├── goals.json            # レガシー (同上)
 ├── guilds/               # ギルドごとのデータ (移行後に自動作成)
 │   └── {guildId}/
-│       ├── personality.json  # SOUL: 可変プロンプト (bot が自己更新可能)
 │       ├── memory.json       # MEMORY: 長期記憶 (bot が自動更新)
 │       ├── goals.json        # GOALS: ゴール管理 (bot が自己更新可能)
 │       └── memory/           # 日次記憶蒸留
@@ -305,11 +304,11 @@ cron (2時間) — 低頻度タスク
 
 ### ギルドごとのデータ分離
 
-personality.json / memory.json / goals.json はギルド（Discord サーバー）ごとに `data/guilds/{guildId}/` に保存され、各サーバーで独立したパーソナリティ・記憶・ゴールを維持する。
+memory.json / goals.json はギルド（Discord サーバー）ごとに `data/guilds/{guildId}/` に保存され、各サーバーで独立した記憶・ゴールを維持する。personality.json は `data/personality.json` にグローバルで保存され、全ギルドで共有される。
 
 | 項目 | スコープ | 理由 |
 |------|---------|------|
-| personality.json | ギルドごと | サーバーごとに独立した人格 |
+| personality.json | グローバル | 全サーバーで共有の人格 |
 | memory.json | ギルドごと | サーバーごとに独立した記憶 |
 | goals.json | ギルドごと | サーバーごとに独立した目標 |
 | heartbeat.json | グローバル | タスクスケジュールはボット全体の設定 |

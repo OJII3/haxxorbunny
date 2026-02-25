@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { guildPersonalityPath } from "../../data/paths.ts";
+import { globalPersonalityPath } from "../../data/paths.ts";
 
 /** 4次元の気分ベクトル (各 0.0〜1.0) */
 export interface MoodState {
@@ -142,8 +142,8 @@ export function moodToText(mood: MoodState): string {
 	return parts.join("、");
 }
 
-export function loadPersonality(guildId: string): Personality {
-	const personalityPath = guildPersonalityPath(guildId);
+export function loadPersonality(): Personality {
+	const personalityPath = globalPersonalityPath();
 	try {
 		const raw = readFileSync(personalityPath, "utf-8");
 		const parsed = JSON.parse(raw) as Record<string, unknown>;
@@ -152,7 +152,7 @@ export function loadPersonality(guildId: string): Personality {
 			mood: migrateMood(parsed.mood),
 		} as Personality;
 	} catch {
-		// ギルドディレクトリにファイルがなければデフォルトで初期化
+		// ファイルがなければデフォルトで初期化
 		const defaultP = { ...DEFAULT_PERSONALITY, mood: { ...DEFAULT_MOOD } };
 		writeFileSync(
 			personalityPath,
@@ -163,11 +163,8 @@ export function loadPersonality(guildId: string): Personality {
 	}
 }
 
-export function updatePersonality(
-	guildId: string,
-	partial: Partial<Personality>,
-): Personality {
-	const current = loadPersonality(guildId);
+export function updatePersonality(partial: Partial<Personality>): Personality {
+	const current = loadPersonality();
 
 	// mood 更新時は補間を適用
 	let updatedMood = current.mood;
@@ -176,7 +173,7 @@ export function updatePersonality(
 	}
 
 	const updated = { ...current, ...partial, mood: updatedMood };
-	const personalityPath = guildPersonalityPath(guildId);
+	const personalityPath = globalPersonalityPath();
 	writeFileSync(personalityPath, JSON.stringify(updated, null, "\t"), "utf-8");
 	return updated;
 }

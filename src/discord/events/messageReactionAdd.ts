@@ -51,7 +51,7 @@ export async function handleMessageReactionAdd(
 	if (isAgentBusyForGuild(guild.id)) return;
 
 	// mood.sociability が低い場合はスキップ
-	const personality = loadPersonality(guild.id);
+	const personality = loadPersonality();
 	if (personality.mood.sociability < 0.3) {
 		console.log("[reaction] Skipped: sociability too low");
 		return;
