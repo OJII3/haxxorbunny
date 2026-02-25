@@ -44,7 +44,7 @@ src/
 ├── client.ts             # Discord Client (GuildMembers intent 含む)
 ├── config.ts             # 環境変数
 ├── data/
-│   └── paths.ts          # ギルドごとのデータパスユーティリティ
+│   └── paths.ts          # ギルドごと＋グローバルのデータパスユーティリティ
 ├── agent/
 │   ├── types.ts          # AgentContext, ToolResult, ToolHandler 等の型定義
 │   ├── loop.ts           # エージェントループ本体 (MAX_ITERATIONS=5, ギルドごとに busy 管理, streaming + max_tokens:2048)
@@ -75,7 +75,7 @@ src/
 │   ├── triage.ts         # トリアージ判定ロジック (mood連動の動的3段階方針)
 │   ├── triage-throttle.ts # チャンネルごとのスロットリング
 │   ├── reflection.ts     # triage後の軽量reflection (人格・記憶更新)
-│   ├── memory.ts         # 記憶管理 (load/save/append/toPrompt + 感情スコアリング)
+│   ├── memory.ts         # 記憶管理 (ギルド + グローバル CRUD/toPrompt + 感情スコアリング)
 │   ├── goals.ts          # ゴール管理 (CRUD + goalsToPrompt)
 │   ├── heartbeat.ts      # 定期タスク管理 + アクティブ時間帯判定
 │   ├── distill.ts        # 記憶蒸留 (日次→長期)
@@ -99,6 +99,7 @@ src/
 data/
 ├── heartbeat.json        # HEARTBEAT: グローバル定期タスク設定
 ├── personality.json      # PERSONALITY: グローバル人格設定 (bot が自己更新可能、全ギルド共有)
+├── global-memory.json    # GLOBAL MEMORY: 全サーバー共通の記憶 (一般知識・夢の洞察)
 ├── memory.json           # レガシー (同上)
 ├── goals.json            # レガシー (同上)
 ├── guilds/               # ギルドごとのデータ (移行後に自動作成)
@@ -112,7 +113,8 @@ data/
 ├── avatar-state.json     # アバター状態（実行時生成, gitignore）
 ├── haxxorbunny.db        # SQLite DB (gitignore)
 scripts/
-└── migrate-to-guild.ts   # 既存データ移行スクリプト
+├── migrate-to-guild.ts       # 既存データ移行スクリプト
+└── migrate-global-memory.ts  # ギルド記憶→グローバル記憶の分類移行スクリプト
 ```
 
 ## アーキテクチャ
@@ -154,7 +156,7 @@ scripts/
 | ツール名 | パラメータ | 説明 |
 |---------|-----------|------|
 | `recall_identity` | (なし) | SOUL_PROMPT + IDENTITY_PROMPT の全文を参照（行動に迷った時に呼ぶ） |
-| `save_memory` | `entry`, `emotional_impact?` | 長期記憶に保存（30字以内、感情インパクト1-5） |
+| `save_memory` | `entry`, `emotional_impact?`, `scope?` | 長期記憶に保存（30字以内、感情インパクト1-5、scope: guild/global） |
 | `save_user_note` | `username`, `note` | ユーザーメモ保存 |
 | `update_personality` | `mood?`, `recent_topics?`, `interests?` | 性格設定更新（mood は4次元ベクトル） |
 
@@ -259,7 +261,7 @@ cron (13分) — 高頻度タスク（agentBusy のみチェック）
   └─ goal_check (720分=12時間): アクティブゴールあれば → 内部確認のみ（発言は基本しない）
 
 cron (2時間) — 低頻度タスク
-  ├─ distill_memory (12時間): 蒸留LLM(flash) → 日次記憶集約 + 長期記憶更新
+  ├─ distill_memory (12時間): 蒸留LLM(flash) → 日次記憶集約 + 長期記憶更新 + グローバル記憶昇格 + trimGlobalMemory
   ├─ cleanup_old_memory (24時間): 古い日次ファイルの整理
   └─ dream_processing (24時間): 夢処理LLM(flash) → 記憶連想分析 + 洞察生成
 ```
@@ -290,7 +292,7 @@ cron (2時間) — 低頻度タスク
 - **重複発言抑制**: SHA-256 + 冒頭50文字ハッシュで24時間キャッシュ。cron トリガー時のみチェック
 - **4次元気分ベクトル**: energy/positivity/sociability/curiosity (各0-1)。時間帯で energy 自動変動、急変防止の補間（70% new + 30% old）
 - **感情付き記憶**: MemoryEntry に emotional_impact (1-5) + created_at。エビングハウス忘却曲線（30日半減期）でスコアリング
-- **夢処理**: 24時間ごとに記憶を連想分析。洞察を [dream] タグ付き記憶として追加、不要記憶を整理
+- **夢処理**: 24時間ごとにサーバー記憶+グローバル記憶を連想分析。洞察を [dream] タグ付きグローバル記憶として追加、不要なサーバー記憶を整理
 - **プロンプト階層化**: 軽量な SURFACE_PROMPT を毎回送信、詳細な SOUL_PROMPT + IDENTITY_PROMPT は recall_identity ツールでオンデマンド参照。トークン消費を ~1250t 削減
 - **メッセージデバウンス**: 同一 channelId:userId の連続メッセージを3秒（`MESSAGE_BUFFER_MS`）蓄積。最大15秒（`MESSAGE_BUFFER_MAX_MS`）で強制フラッシュ。結合コンテンツとしてトリアージに渡す
 - **自動 typing インジケーター**: エージェントループ中は5秒間隔で sendTyping() を呼び、Discord 上に「入力中…」を表示
@@ -311,6 +313,7 @@ memory.json / goals.json はギルド（Discord サーバー）ごとに `data/g
 | 項目 | スコープ | 理由 |
 |------|---------|------|
 | personality.json | グローバル | 全サーバーで共有の人格 |
+| global-memory.json | グローバル | 一般知識・夢の洞察（全サーバー共通） |
 | memory.json | ギルドごと | サーバーごとに独立した記憶 |
 | goals.json | ギルドごと | サーバーごとに独立した目標 |
 | heartbeat.json | グローバル | タスクスケジュールはボット全体の設定 |
@@ -321,6 +324,21 @@ memory.json / goals.json はギルド（Discord サーバー）ごとに `data/g
 | DB (messages, bot_actions) | guild_id カラム | ギルド限定クエリに対応 |
 
 **移行**: memory.json / goals.json は `bun run scripts/migrate-to-guild.ts <guildId>` で移行可能（personality.json はグローバルのため移行対象外）。
+
+### グローバルメモリ
+
+サーバーに依存しない一般知識や夢の洞察は `data/global-memory.json` にグローバルメモリとして保存される。ギルドメモリとは独立して管理され、全サーバーのプロンプトに「共通の記憶」セクションとして含まれる。
+
+**保存経路:**
+- `save_memory` ツールの `scope: "global"` で bot が明示的に保存
+- 蒸留時に LLM が `promote_to_global` で自動分類（一般知識・技術的学び・自己の気づき）
+- 夢処理の洞察（`[dream]` タグ付き記憶）は自動的にグローバルメモリに保存
+
+**上限:** 最大50エントリ（`GLOBAL_MAX_ENTRIES`）。超過時はリコールスコアの低いエントリから削除。蒸留タスク実行時に `trimGlobalMemory()` でトリミング。
+
+**プロンプト出力:** 上位15件（`GLOBAL_PROMPT_TOP_ENTRIES`）が「共通の記憶」セクションとして表示。
+
+**移行:** 既存のギルドメモリからグローバルメモリに分類移行するには `bun run scripts/migrate-global-memory.ts <guildId> [--dry-run]` を使用。
 
 ### DB テーブル
 

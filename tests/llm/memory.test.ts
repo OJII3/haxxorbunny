@@ -1,14 +1,18 @@
 import { afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, rmSync } from "node:fs";
-import { guildMemoryPath } from "../../src/data/paths.ts";
+import { globalMemoryPath, guildMemoryPath } from "../../src/data/paths.ts";
 import {
 	addUserNote,
+	appendGlobalMemoryEntry,
 	appendMemoryEntry,
 	computeRecallScore,
+	type GlobalMemory,
+	loadGlobalMemory,
 	loadMemory,
 	type MemoryEntry,
 	memoryToPrompt,
 	normalizeEntry,
+	saveGlobalMemory,
 	saveMemory,
 } from "../../src/llm/memory.ts";
 import { createTestTables } from "../helpers/test-db.ts";
@@ -22,6 +26,8 @@ beforeAll(() => {
 afterEach(() => {
 	const memPath = guildMemoryPath(GUILD_ID);
 	if (existsSync(memPath)) rmSync(memPath);
+	const globalPath = globalMemoryPath();
+	if (existsSync(globalPath)) rmSync(globalPath);
 });
 
 describe("normalizeEntry", () => {
@@ -168,5 +174,96 @@ describe("memoryToPrompt", () => {
 		const memory = loadMemory(GUILD_ID);
 		const prompt = memoryToPrompt(memory);
 		expect(prompt).toContain("まだ記憶はありません");
+	});
+
+	test("グローバルメモリを渡すと「共通の記憶」セクションが含まれる", () => {
+		const memory = loadMemory(GUILD_ID);
+		memory.entries.push({
+			text: "サーバー固有の記憶",
+			emotional_impact: 3,
+			created_at: new Date().toISOString(),
+		});
+		saveMemory(GUILD_ID, memory);
+
+		const globalMemory: GlobalMemory = {
+			entries: [
+				{
+					text: "共通の知識",
+					emotional_impact: 3,
+					created_at: new Date().toISOString(),
+				},
+			],
+			last_updated: new Date().toISOString(),
+		};
+
+		const prompt = memoryToPrompt(memory, globalMemory);
+		expect(prompt).toContain("共通の記憶");
+		expect(prompt).toContain("共通の知識");
+		expect(prompt).toContain("このサーバーの記憶");
+		expect(prompt).toContain("サーバー固有の記憶");
+	});
+
+	test("グローバルメモリが空の場合は「共通の記憶」セクションが含まれない", () => {
+		const memory = loadMemory(GUILD_ID);
+		memory.entries.push({
+			text: "テスト",
+			emotional_impact: 2,
+			created_at: new Date().toISOString(),
+		});
+		saveMemory(GUILD_ID, memory);
+
+		const globalMemory: GlobalMemory = {
+			entries: [],
+			last_updated: "",
+		};
+
+		const prompt = memoryToPrompt(memory, globalMemory);
+		expect(prompt).not.toContain("共通の記憶");
+		expect(prompt).toContain("このサーバーの記憶");
+	});
+});
+
+describe("loadGlobalMemory / saveGlobalMemory", () => {
+	test("存在しない場合はデフォルトを返す", () => {
+		const memory = loadGlobalMemory();
+		expect(memory.entries).toEqual([]);
+	});
+
+	test("保存したデータを読み込める", () => {
+		const memory: GlobalMemory = {
+			entries: [
+				{
+					text: "global test",
+					emotional_impact: 3,
+					created_at: new Date().toISOString(),
+				},
+			],
+			last_updated: "",
+		};
+		saveGlobalMemory(memory);
+
+		const loaded = loadGlobalMemory();
+		expect(loaded.entries).toHaveLength(1);
+		expect(loaded.entries[0]?.text).toBe("global test");
+	});
+});
+
+describe("appendGlobalMemoryEntry", () => {
+	test("グローバルメモリにエントリを追加できる", async () => {
+		await appendGlobalMemoryEntry("一般知識テスト", 3);
+
+		const memory = loadGlobalMemory();
+		expect(memory.entries).toHaveLength(1);
+		expect(memory.entries[0]?.text).toBe("一般知識テスト");
+		expect(memory.entries[0]?.emotional_impact).toBe(3);
+	});
+
+	test("emotional_impact が 1-5 にクランプされる", async () => {
+		await appendGlobalMemoryEntry("low", 0);
+		await appendGlobalMemoryEntry("high", 10);
+
+		const memory = loadGlobalMemory();
+		expect(memory.entries[0]?.emotional_impact).toBe(1);
+		expect(memory.entries[1]?.emotional_impact).toBe(5);
 	});
 });

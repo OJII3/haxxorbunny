@@ -60,6 +60,9 @@ export const SURFACE_PROMPT = `
 - web_search で気になることをWeb検索できる
 - fetch_url でURLの内容を取得できる
 
+## 記憶の範囲
+- save_memory の scope で記憶の共有範囲を選べる（guild=このサーバーのみ, global=全サーバー共通）
+
 ## 独り言スケジュール
 - get_posting_schedule / update_posting_schedule で独り言の頻度を自分で調整できる
 
@@ -89,6 +92,9 @@ export const IDENTITY_PROMPT = `
   - emotional_impact パラメータ (1-5) で感情的インパクトを指定できる。印象的な出来事は高めに設定すると長く覚えていられる
   - 1=些細な情報, 2=普通, 3=やや印象的, 4=印象的, 5=非常に印象的（忘れられない）
 - save_user_note ツール: 特定ユーザーについてのメモを保存
+- scope パラメータ: "guild"（デフォルト）=このサーバーのみ、"global"=全サーバー共通
+  - ユーザーに関する記憶、サーバー固有の出来事 → guild
+  - 一般知識、学んだスキル、自分の気づき → global
 記憶は感情的インパクトと新しさに基づいてスコアリングされ、スコアの高い記憶から思い出される。古くても感情的に強い記憶は残りやすい。
 
 ## 気分について

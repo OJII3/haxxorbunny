@@ -1,6 +1,10 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { guildDailyMemoryDir, guildMemoryPath } from "../data/paths.ts";
+import {
+	globalMemoryPath,
+	guildDailyMemoryDir,
+	guildMemoryPath,
+} from "../data/paths.ts";
 
 /** 感情付き記憶エントリ */
 export interface MemoryEntry {
@@ -20,9 +24,17 @@ interface DailyMemory {
 	entries: string[];
 }
 
+/** グローバルメモリ: サーバーに依存しない一般知識・夢の洞察 */
+export interface GlobalMemory {
+	entries: MemoryEntry[];
+	last_updated: string;
+}
+
 const MAX_ENTRIES = 100;
 const MAX_USER_NOTES = 10;
 const PROMPT_TOP_ENTRIES = 20;
+const GLOBAL_MAX_ENTRIES = 50;
+const GLOBAL_PROMPT_TOP_ENTRIES = 15;
 
 // 簡易 mutex: ギルドごとにファイルの Read-Modify-Write を直列化する
 const memoryLocks = new Map<string, Promise<void>>();
@@ -103,6 +115,68 @@ export function saveMemory(guildId: string, memory: Memory): void {
 	writeFileSync(memoryPath, JSON.stringify(memory, null, "\t"), "utf-8");
 }
 
+export function loadGlobalMemory(): GlobalMemory {
+	const memPath = globalMemoryPath();
+	try {
+		const raw = readFileSync(memPath, "utf-8");
+		return JSON.parse(raw) as GlobalMemory;
+	} catch {
+		const defaultMemory: GlobalMemory = {
+			entries: [],
+			last_updated: "",
+		};
+		saveGlobalMemory(defaultMemory);
+		return defaultMemory;
+	}
+}
+
+export function saveGlobalMemory(memory: GlobalMemory): void {
+	memory.last_updated = new Date().toISOString();
+	const memPath = globalMemoryPath();
+	writeFileSync(memPath, JSON.stringify(memory, null, "\t"), "utf-8");
+}
+
+export function appendGlobalMemoryEntry(
+	entry: string,
+	emotionalImpact = 3,
+): Promise<void> {
+	return withMemoryLock("__global__", () => {
+		const memory = loadGlobalMemory();
+		const memoryEntry: MemoryEntry = {
+			text: entry,
+			emotional_impact: Math.max(1, Math.min(5, emotionalImpact)),
+			created_at: new Date().toISOString(),
+		};
+		memory.entries.push(memoryEntry);
+		if (memory.entries.length > GLOBAL_MAX_ENTRIES) {
+			const scored = memory.entries
+				.map((e) => ({
+					entry: e,
+					score: computeRecallScore(normalizeEntry(e)),
+				}))
+				.sort((a, b) => b.score - a.score);
+			memory.entries = scored.slice(0, GLOBAL_MAX_ENTRIES).map((s) => s.entry);
+		}
+		saveGlobalMemory(memory);
+		console.log(`[global-memory] Added (impact=${emotionalImpact}): ${entry}`);
+	});
+}
+
+/** グローバルメモリを GLOBAL_MAX_ENTRIES に収まるようトリミングする */
+export function trimGlobalMemory(): void {
+	const memory = loadGlobalMemory();
+	if (memory.entries.length <= GLOBAL_MAX_ENTRIES) return;
+	const scored = memory.entries
+		.map((e) => {
+			const entry = normalizeEntry(e);
+			return { entry, score: computeRecallScore(entry) };
+		})
+		.sort((a, b) => b.score - a.score);
+	memory.entries = scored.slice(0, GLOBAL_MAX_ENTRIES).map((s) => s.entry);
+	saveGlobalMemory(memory);
+	console.log(`[global-memory] Trimmed to ${GLOBAL_MAX_ENTRIES} entries`);
+}
+
 export function appendMemoryEntry(
 	guildId: string,
 	entry: string,
@@ -153,18 +227,47 @@ export function addUserNote(
 	});
 }
 
-export function memoryToPrompt(memory: Memory): string {
-	// スコアの上位 PROMPT_TOP_ENTRIES 件を選択
+export function memoryToPrompt(
+	memory: Memory,
+	globalMemory?: GlobalMemory,
+): string {
+	let prompt = "\n## 記憶 (MEMORY)\n";
+
+	// グローバルメモリ（共通の記憶）
+	if (globalMemory && globalMemory.entries.length > 0) {
+		const globalNormalized = globalMemory.entries.map(normalizeEntry);
+		const globalScored = globalNormalized
+			.map((entry, idx) => ({
+				entry,
+				idx,
+				score: computeRecallScore(entry),
+			}))
+			.sort((a, b) => b.score - a.score)
+			.slice(0, GLOBAL_PROMPT_TOP_ENTRIES);
+
+		if (globalScored.length > 0) {
+			prompt += "### 共通の記憶\n";
+			for (const { entry } of globalScored) {
+				const impactMark =
+					entry.emotional_impact >= 4
+						? " ⚡"
+						: entry.emotional_impact >= 3
+							? " ✦"
+							: "";
+				prompt += `- ${entry.text}${impactMark}\n`;
+			}
+		}
+	}
+
+	// ギルドメモリ（このサーバーの記憶）
 	const normalized = memory.entries.map(normalizeEntry);
 	const scored = normalized
 		.map((entry, idx) => ({ entry, idx, score: computeRecallScore(entry) }))
 		.sort((a, b) => b.score - a.score)
 		.slice(0, PROMPT_TOP_ENTRIES);
 
-	let prompt = "\n## 記憶 (MEMORY)\n";
-
 	if (scored.length > 0) {
-		prompt += "### 思い出せる記憶（スコア順）\n";
+		prompt += "### このサーバーの記憶（スコア順）\n";
 		for (const { entry } of scored) {
 			const impactMark =
 				entry.emotional_impact >= 4
@@ -187,7 +290,8 @@ export function memoryToPrompt(memory: Memory): string {
 		}
 	}
 
-	if (scored.length === 0 && usernames.length === 0) {
+	const hasGlobalEntries = globalMemory && globalMemory.entries.length > 0;
+	if (scored.length === 0 && usernames.length === 0 && !hasGlobalEntries) {
 		prompt += "(まだ記憶はありません)\n";
 	}
 
