@@ -2,6 +2,7 @@ import { afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { memoryTools } from "../../src/agent/tools/memory.ts";
 import {
+	globalMemoryPath,
 	globalPersonalityPath,
 	guildMemoryPath,
 } from "../../src/data/paths.ts";
@@ -28,6 +29,8 @@ afterEach(() => {
 	if (existsSync(memPath)) rmSync(memPath);
 	const persPath = globalPersonalityPath();
 	if (existsSync(persPath)) rmSync(persPath);
+	const globalPath = globalMemoryPath();
+	if (existsSync(globalPath)) rmSync(globalPath);
 });
 
 describe("save_memory", () => {
@@ -57,6 +60,53 @@ describe("save_memory", () => {
 		const result = await handler({ entry: "a".repeat(31) }, ctx);
 		expect(result.success).toBe(false);
 		expect(result.result).toContain("30 characters or less");
+	});
+
+	test("scope='global' でグローバルメモリに保存される", async () => {
+		const handler = getHandler("save_memory");
+		const ctx = createMockContext({
+			guild: { id: GUILD_ID } as never,
+		});
+
+		const result = await handler(
+			{ entry: "一般知識テスト", scope: "global" },
+			ctx,
+		);
+		expect(result.success).toBe(true);
+		expect(result.result).toContain("Global memory saved");
+
+		// グローバルメモリに保存されている
+		const globalRaw = readFileSync(globalMemoryPath(), "utf-8");
+		const globalMemory = JSON.parse(globalRaw);
+		expect(globalMemory.entries).toHaveLength(1);
+		expect(globalMemory.entries[0].text).toBe("一般知識テスト");
+
+		// ギルドメモリには保存されていない
+		if (existsSync(guildMemoryPath(GUILD_ID))) {
+			const guildRaw = readFileSync(guildMemoryPath(GUILD_ID), "utf-8");
+			const guildMemory = JSON.parse(guildRaw);
+			expect(guildMemory.entries).toHaveLength(0);
+		}
+	});
+
+	test("scope='guild' または省略時はギルドメモリに保存される", async () => {
+		const handler = getHandler("save_memory");
+		const ctx = createMockContext({
+			guild: { id: GUILD_ID } as never,
+		});
+
+		const result = await handler(
+			{ entry: "サーバー記憶", scope: "guild" },
+			ctx,
+		);
+		expect(result.success).toBe(true);
+		expect(result.result).toContain("Memory saved");
+		expect(result.result).not.toContain("Global");
+
+		const raw = readFileSync(guildMemoryPath(GUILD_ID), "utf-8");
+		const memory = JSON.parse(raw);
+		expect(memory.entries).toHaveLength(1);
+		expect(memory.entries[0].text).toBe("サーバー記憶");
 	});
 
 	test("isMentioned=true 時に emotional_impact が最低3にフロアリングされる", async () => {
