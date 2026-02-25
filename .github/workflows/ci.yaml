@@ -30,6 +30,10 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - run: bun test
+        env:
+          DISCORD_TOKEN: test
+          DISCORD_APP_ID: test
+          GEMINI_API_KEY: test
 
   build:
     runs-on: ubuntu-latest
