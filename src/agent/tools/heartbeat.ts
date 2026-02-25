@@ -10,8 +10,8 @@ function fail(result: string): ToolResult {
 }
 
 const AUTONOMOUS_POST_ID = "autonomous_post";
-const MIN_INTERVAL = 15;
-const MAX_INTERVAL = 1440;
+const MIN_INTERVAL = 1440; // 最低でも1日に1回
+const MAX_INTERVAL = 10080; // 最大1週間
 
 const getPostingScheduleHandler: ToolHandler = async () => {
 	const heartbeat = loadHeartbeat();
@@ -98,7 +98,8 @@ export const heartbeatTools: ToolDefinition[] = [
 						},
 						interval_minutes: {
 							type: "number",
-							description: "独り言の間隔（分）。15〜1440の範囲",
+							description:
+								"独り言の間隔（分）。1440〜10080の範囲（1日〜1週間）",
 						},
 					},
 				},

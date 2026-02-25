@@ -186,7 +186,7 @@ scripts/
 | ツール名 | パラメータ | 説明 |
 |---------|-----------|------|
 | `get_posting_schedule` | (なし) | 独り言の現在の設定（enabled, interval_minutes）を返す |
-| `update_posting_schedule` | `enabled?`, `interval_minutes?` | 独り言の頻度を変更。interval は 15〜1440 分の範囲 |
+| `update_posting_schedule` | `enabled?`, `interval_minutes?` | 独り言の頻度を変更。interval は 1440〜10080 分の範囲（1日〜1週間） |
 
 **プロフィール画像ツール:**
 
@@ -254,9 +254,9 @@ VC参加リクエスト（メンション + キーワード）
   → エージェントループ起動 (triggeredBy: "reaction", reactionContext 付き)
 
 cron (13分) — 高頻度タスク（agentBusy のみチェック）
-  ├─ autonomous_post (60分, disabled): アクティブ時間内のみ → 自由行動プロンプト → エージェントループ
-  ├─ channel_patrol (180分): 全チャンネルスキャン → bot不在60分超 かつ 直近人間メッセージ60日以内のチャンネル → エージェントループ
-  └─ goal_check (120分): アクティブゴールあれば → ゴールコンテキスト付きエージェントループ
+  ├─ autonomous_post (60分, disabled): アクティブ時間内のみ → 自由行動プロンプト → エージェントループ（95%+ do_nothing）
+  ├─ channel_patrol (1440分=1日): 全チャンネルスキャン → bot不在24時間超 かつ 直近人間メッセージ7日以内のチャンネル → エージェントループ（99% do_nothing）
+  └─ goal_check (720分=12時間): アクティブゴールあれば → 内部確認のみ（発言は基本しない）
 
 cron (2時間) — 低頻度タスク
   ├─ distill_memory (12時間): 蒸留LLM(flash) → 日次記憶集約 + 長期記憶更新
@@ -297,7 +297,7 @@ cron (2時間) — 低頻度タスク
 - **ゴール駆動行動**: bot が自分で目標を設定し、cron で定期的に進捗確認・アクション実行
 - **チャンネル巡回**: bot が不在のチャンネルを定期的にスキャンし、直近60日以内に人間のメッセージがあれば参加を検討。古い話題には参加しない
 - **メンション記憶強化**: メンション（直接の呼びかけ）による指示・依頼は忘れにくくする。AgentContext に `isMentioned` を伝播し、①システムプロンプトで save_memory を促す、②emotional_impact の最低値を 3 にフロアリング。30日後のスコアが impact=2 の ~0.425 → impact=3 の ~0.500 以上に改善
-- **自律的スケジュール調整**: bot が `get_posting_schedule` / `update_posting_schedule` ツールで独り言（autonomous_post）の頻度を自分で調整可能。気分や状況に応じて有効/無効の切り替えや間隔（15〜1440分）の変更ができる
+- **自律的スケジュール調整**: bot が `get_posting_schedule` / `update_posting_schedule` ツールで独り言（autonomous_post）の頻度を自分で調整可能。気分や状況に応じて有効/無効の切り替えや間隔（1440〜10080分 = 1日〜1週間）の変更ができる
 - **自律的プロフィール画像変更**: bot が `list_avatars` / `change_avatar` / `get_avatar_status` ツールでプロフィール画像を自律的に変更可能。30分のクールダウンで頻繁な変更を防止。変更履歴（直近20件）を記録。画像は `data/avatars/` に配置し `manifest.json` で管理
 - **LLM ストリーミング応答**: エージェントループの LLM 呼び出しは `stream: true` + `max_tokens: 2048` で動作。チャンクから content と tool_calls を index ベースで蓄積・組み立て。aiclient-2-api のバッファリング遅延を回避し TTFB を改善。ストリームエラー・空レスポンス・max_tokens 途中切れのガード付き
 - **連結 JSON 展開**: LLM が tool_call の arguments に複数の JSON オブジェクトを連結して返すケース（`{...}{...}`）に対応。`parseAllJsonObjects` が全オブジェクトを抽出し、`inferToolNameFromArgs` が各オブジェクトの引数キーからツール定義をスコアリングしてツール名を推定。エージェントループで個別の tool_call として展開・実行する。`parseToolArguments` は安全弁として先頭オブジェクトのみ返すフォールバックを維持

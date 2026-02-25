@@ -13,13 +13,13 @@
 		{
 			"id": "channel_patrol",
 			"description": "チャンネルを巡回して未参加の会話に反応する",
-			"interval_minutes": 180,
+			"interval_minutes": 1440,
 			"enabled": true
 		},
 		{
 			"id": "goal_check",
 			"description": "アクティブな目標の進捗確認・アクション実行",
-			"interval_minutes": 120,
+			"interval_minutes": 720,
 			"enabled": true
 		},
 		{

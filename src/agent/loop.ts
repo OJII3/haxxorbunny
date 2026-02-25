@@ -336,12 +336,18 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 			content: `あなたはこのチャンネル (#${ctx.patrolContext.channelName}) を ${ctx.patrolContext.minutesSinceLastBotMessage} 分間見ていませんでした。
 会話を読んで状況を把握してください。
 
-【重要】基本的には do_nothing を選んでください。発言するのは以下の場合のみ:
-- あなたに直接関係する話題や、名前が出ている場合
-- 明らかに困っている人がいて、あなたが有益な情報を提供できる場合
-- 会話が自分への質問や依頼を含んでいる場合
+【最重要】ほぼ確実に do_nothing を選んでください。あなたは基本的に静かな存在です。
+発言してよいのは、以下の極めて限定的なケースのみ:
+- あなたの名前が直接呼ばれていて、明確に返答を求められている場合
+- 誰かが本当に困っていて、あなたしか助けられない具体的な情報がある場合
 
-それ以外は do_nothing で静かに見守ってください。「何か言わなきゃ」と思う必要はありません。`,
+以下の場合は絶対に発言しないでください:
+- 「面白そうだから一言言いたい」程度の気持ち
+- 話題に関連する知識があるだけ
+- 会話を盛り上げたい、参加したいという気持ち
+- 雑談や独り言
+
+迷ったら do_nothing です。99% の場合は do_nothing が正解です。`,
 		});
 	} else if (ctx.goalContext) {
 		// ゴールチェックトリガー
@@ -362,8 +368,11 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 
 ${ctx.goalContext.activeGoalsSummary}
 
-目標に向けて何かアクションを取りたいですか？ web_search で情報を調べたり、send_message で誰かに聞いたり、update_goal_progress でメモを残したりできます。
-特にやることがなければ do_nothing を呼んでください。`,
+目標の進捗を内部的に確認してください。
+やれることは update_goal_progress でメモを残す、complete_goal で完了にする、web_search で調べる程度です。
+
+【重要】チャンネルへのメッセージ送信（send_message, reply_to_message）は基本的にしないでください。
+ゴール確認は内部処理です。よほど重要な発見や報告がない限り、黙って確認だけして do_nothing で終了してください。`,
 		});
 	} else {
 		// cron 自主発言トリガー（デフォルト）
@@ -384,14 +393,13 @@ ${ctx.goalContext.activeGoalsSummary}
 			role: "user",
 			content: `現在時刻: ${now.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}
 ${goalsPrompt ? `\n${goalsPrompt}\n` : ""}
-自由行動タイム！やりたいことを選んでください:
-- 独り言を投稿する（times チャンネルに投稿するような軽い独り言）
+自由行動タイム。以下から選んでください:
 - web_search で気になることを調べる
-- list_channels で他のチャンネルを見に行く
 - 目標があれば進捗を確認・更新する
 - 特に何もなければ do_nothing
 
-何をしますか？`,
+【重要】独り言の投稿は極めて稀にしてください。本当に共有したい発見や、心から伝えたいことがある場合のみ。
+「何か投稿しなきゃ」という義務感での投稿は不要です。95% 以上の確率で do_nothing が正解です。`,
 		});
 	}
 
