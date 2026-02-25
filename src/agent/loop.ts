@@ -28,7 +28,7 @@ import {
 } from "./tools/index.ts";
 import type { AgentContext } from "./types.ts";
 
-const MAX_ITERATIONS = 10;
+const MAX_ITERATIONS = 5;
 
 /**
  * tool_call の arguments をパースする。

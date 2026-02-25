@@ -47,7 +47,7 @@ src/
 │   └── paths.ts          # ギルドごとのデータパスユーティリティ
 ├── agent/
 │   ├── types.ts          # AgentContext, ToolResult, ToolHandler 等の型定義
-│   ├── loop.ts           # エージェントループ本体 (MAX_ITERATIONS=10, ギルドごとに busy 管理, streaming + max_tokens:2048)
+│   ├── loop.ts           # エージェントループ本体 (MAX_ITERATIONS=5, ギルドごとに busy 管理, streaming + max_tokens:2048)
 │   └── tools/
 │       ├── index.ts      # ツールレジストリ（定義集約 + 名前→ハンドラ Map）
 │       ├── discord.ts    # Discord 操作ツール群
@@ -239,7 +239,7 @@ scripts/
        ├─ tool_calls → 各ツール実行 → 結果を LLM に返す → ループ
        ├─ LLM が必要時に recall_identity ツールで SOUL + IDENTITY の詳細を参照
        ├─ finish_reason=length → 途中切れガードで安全に終了
-       └─ finish_reason=stop → 終了（最大10イテレーション）+ typing インジケーター停止
+       └─ finish_reason=stop → 終了（最大5イテレーション）+ typing インジケーター停止
 
 VC参加リクエスト（メンション + キーワード）
   → メンバーがVC在室？ → voiceManager.startSession() → VC参加
