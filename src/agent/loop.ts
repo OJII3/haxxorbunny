@@ -191,7 +191,11 @@ export const IMAGE_CONTENT_TYPES = new Set([
 ]);
 export const MAX_IMAGES_PER_MESSAGE = 4;
 
-/** Discord Message から画像 attachment を抽出し、OpenAI の image_url パーツ配列を返す */
+/**
+ * Discord Message から画像 attachment を抽出し、OpenAI の image_url パーツ配列を返す。
+ * NOTE: Discord CDN URL には有効期限付き署名が含まれる場合がある。
+ * 直近メッセージのみが対象のため通常問題ないが、古いメッセージの画像は失効の可能性あり。
+ */
 function extractImageParts(msg: Message): ChatCompletionContentPart[] {
 	const parts: ChatCompletionContentPart[] = [];
 	for (const attachment of msg.attachments.values()) {
@@ -318,8 +322,10 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 		const recentMessages = await ctx.triggerMessage.channel.messages.fetch({
 			limit: 20,
 		});
+		// トリガーメッセージは後で個別に追加するため、履歴から除外して重複を防ぐ
+		const triggerId = ctx.triggerMessage.id;
 		const history = buildConversationHistory(
-			[...recentMessages.values()].reverse(),
+			[...recentMessages.values()].filter((m) => m.id !== triggerId).reverse(),
 		);
 		for (const msg of history) {
 			messages.push(msg);
