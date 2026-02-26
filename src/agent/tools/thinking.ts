@@ -16,7 +16,12 @@ const aiAskHandler: ToolHandler = async (args) => {
 
 	const context = (args.context as string) ?? "";
 
-	const messages: { role: "user"; content: string }[] = [
+	const messages: { role: "system" | "user"; content: string }[] = [
+		{
+			role: "system",
+			content:
+				"あなたは Discord bot の内部アドバイザーです。質問に対して簡潔かつ有用な回答をしてください。違法行為の指示・個人情報の生成・NSFWコンテンツの生成は行わないでください。",
+		},
 		{
 			role: "user",
 			content: context
