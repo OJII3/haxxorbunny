@@ -17,6 +17,7 @@ import { loadPersonality } from "../../llm/prompts/personality.ts";
 import { reflect } from "../../llm/reflection.ts";
 import { triage } from "../../llm/triage.ts";
 import { shouldSkipTriage } from "../../llm/triage-throttle.ts";
+import { formatJSTShort } from "../../utils/time.ts";
 import { voiceManager } from "../../voice/manager.ts";
 
 function isMentioned(message: Message): boolean {
@@ -112,7 +113,12 @@ async function handleVoiceJoinRequest(message: Message): Promise<boolean> {
 
 function buildConversationContext(channelId: string): string {
 	const messages = getRecentMessages(channelId, 10);
-	return messages.map((m) => `[${m.username}]: ${m.content}`).join("\n");
+	return messages
+		.map((m) => {
+			const time = m.createdAt ? formatJSTShort(new Date(m.createdAt)) : "?";
+			return `[${time} ${m.username}]: ${m.content}`;
+		})
+		.join("\n");
 }
 
 async function processBufferedMessages(
@@ -146,8 +152,13 @@ async function processBufferedMessages(
 
 	try {
 		const personality = loadPersonality();
+		const chName =
+			"name" in lastMessage.channel
+				? (lastMessage.channel.name as string)
+				: channelId;
 		const triageResult = await triage(
 			channelId,
+			chName,
 			combinedContent,
 			authorName,
 			hasMention,

@@ -1,5 +1,6 @@
 import { config } from "../config.ts";
 import { getLastBotAction, getRecentMessages } from "../db/queries.ts";
+import { formatJSTFull, formatJSTShort } from "../utils/time.ts";
 import type { MoodState } from "./prompts/personality.ts";
 import { triageLlm } from "./triage-client.ts";
 
@@ -109,6 +110,7 @@ JSON のみを返すこと。それ以外のテキストは一切不要。reason
 
 function buildTriageContext(
 	channelId: string,
+	channelName: string,
 	messageContent: string,
 	authorName: string,
 	isMentioned: boolean,
@@ -119,7 +121,10 @@ function buildTriageContext(
 	const now = new Date();
 
 	const conversationLog = recentMessages
-		.map((m) => `[${m.username}]: ${m.content}`)
+		.map((m) => {
+			const time = m.createdAt ? formatJSTShort(new Date(m.createdAt)) : "?";
+			return `[${time} ${m.username}]: ${m.content}`;
+		})
 		.join("\n");
 
 	const timeSinceLastAction = lastAction?.createdAt
@@ -131,6 +136,9 @@ function buildTriageContext(
 		: "";
 
 	return `
+## チャンネル: #${channelName}
+## 現在時刻: ${formatJSTFull(now)}
+
 ## 直近の会話 (最新10件)
 ${conversationLog || "(なし)"}
 
@@ -144,6 +152,7 @@ ${lastAction ? `${timeSinceLastAction} — action: ${lastAction.action}, content
 
 export async function triage(
 	channelId: string,
+	channelName: string,
 	messageContent: string,
 	authorName: string,
 	isMentioned: boolean,
@@ -151,6 +160,7 @@ export async function triage(
 ): Promise<TriageResult> {
 	const context = buildTriageContext(
 		channelId,
+		channelName,
 		messageContent,
 		authorName,
 		isMentioned,

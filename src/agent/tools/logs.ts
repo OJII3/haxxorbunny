@@ -1,4 +1,5 @@
 import { searchBotActions, searchMessages } from "../../db/queries.ts";
+import { formatJSTShort } from "../../utils/time.ts";
 import type { ToolDefinition, ToolHandler, ToolResult } from "../types.ts";
 
 // ── helpers ──
@@ -37,9 +38,7 @@ const viewMessages: ToolHandler = async (args, ctx) => {
 		if (rows.length === 0) return ok("(no messages found)");
 
 		const lines = rows.map((r) => {
-			const time = r.createdAt
-				? new Date(r.createdAt).toISOString().slice(0, 16)
-				: "?";
+			const time = r.createdAt ? formatJSTShort(new Date(r.createdAt)) : "?";
 			const bot = r.isBot ? "[BOT]" : "";
 			return `${time} ${bot}${r.username}: ${truncate(r.content)}`;
 		});
@@ -68,9 +67,7 @@ const viewMyActions: ToolHandler = async (args, ctx) => {
 		if (rows.length === 0) return ok("(no actions found)");
 
 		const lines = rows.map((r) => {
-			const time = r.createdAt
-				? new Date(r.createdAt).toISOString().slice(0, 16)
-				: "?";
+			const time = r.createdAt ? formatJSTShort(new Date(r.createdAt)) : "?";
 			const ch = r.channelId ? ` ch:${r.channelId}` : "";
 			const content = r.content ? ` ${truncate(r.content)}` : "";
 			return `${time} [${r.action}] via:${r.triggeredBy ?? "?"}${ch}${content}`;

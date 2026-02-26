@@ -180,6 +180,7 @@ export class VoiceSession {
 			recentTranscripts: this.getRecentTranscripts().map((t) => ({
 				displayName: t.displayName,
 				text: t.text,
+				timestamp: t.timestamp,
 			})),
 		};
 	}

@@ -15,6 +15,7 @@ import {
 	markChannelResponded,
 	unlockChannel,
 } from "../llm/triage-throttle.ts";
+import { formatJSTFull, formatJSTShort } from "../utils/time.ts";
 import {
 	getToolHandler,
 	inferToolNameFromArgs,
@@ -214,7 +215,8 @@ interface ConversationMessage {
 
 function buildConversationHistory(messages: Message[]): ConversationMessage[] {
 	return messages.map((msg) => {
-		const text = `[${msg.author.displayName}]: ${msg.content}`;
+		const time = formatJSTShort(new Date(msg.createdTimestamp));
+		const text = `[${time} ${msg.author.displayName}]: ${msg.content}`;
 		// assistant ロールに image_url パーツは非対応のため、bot メッセージでは画像を除外
 		const imageParts = msg.author.bot ? [] : extractImageParts(msg);
 		return {
@@ -225,6 +227,22 @@ function buildConversationHistory(messages: Message[]): ConversationMessage[] {
 					: text,
 		};
 	});
+}
+
+/** DB メッセージ行を "MM/DD HH:MM ユーザー名: 内容" 形式に整形する */
+function formatDbMessages(
+	rows: {
+		createdAt?: string | Date | null;
+		username: string;
+		content: string;
+	}[],
+): string {
+	return rows
+		.map((m) => {
+			const time = m.createdAt ? formatJSTShort(new Date(m.createdAt)) : "?";
+			return `[${time} ${m.username}]: ${m.content}`;
+		})
+		.join("\n");
 }
 
 /** エージェントループ本体 */
@@ -285,13 +303,29 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 		name?: string;
 	}> = [{ role: "system", content: systemPrompt }];
 
+	// チャンネル情報・現在時刻を全トリガー共通で追加
+	const channelName =
+		"name" in ctx.channel ? (ctx.channel.name as string) : "DM";
+	const channelTopic =
+		"topic" in ctx.channel ? (ctx.channel.topic as string | null) : null;
+	messages.push({
+		role: "system",
+		content: `現在のチャンネル: #${channelName}${channelTopic ? `\nチャンネルトピック: ${channelTopic}` : ""}
+現在時刻: ${formatJSTFull(new Date())}
+
+チャンネルの話題の流れに沿った発言を心がけること。古い話題を唐突に掘り返さないこと。`,
+	});
+
 	const isVoiceMode = ctx.triggeredBy === "voice";
 
 	if (isVoiceMode && ctx.voiceContext) {
 		// ボイスチャットトリガー
 		const vc = ctx.voiceContext;
 		const transcriptHistory = vc.recentTranscripts
-			.map((t) => `[${t.displayName}]: ${t.text}`)
+			.map((t) => {
+				const time = formatJSTShort(new Date(t.timestamp));
+				return `[${time} ${t.displayName}]: ${t.text}`;
+			})
 			.join("\n");
 
 		messages.push({
@@ -325,7 +359,10 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 		for (const msg of history) {
 			messages.push(msg);
 		}
-		const triggerText = `[${ctx.triggerMessage.author.displayName}]: ${ctx.triggerMessage.content}`;
+		const triggerTime = formatJSTShort(
+			new Date(ctx.triggerMessage.createdTimestamp),
+		);
+		const triggerText = `[${triggerTime} ${ctx.triggerMessage.author.displayName}]: ${ctx.triggerMessage.content}`;
 		const triggerImageParts = extractImageParts(ctx.triggerMessage);
 		messages.push({
 			role: "user",
@@ -347,12 +384,9 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 		// リアクショントリガー
 		const dbMessages = getRecentMessages(ctx.channel.id, 5);
 		if (dbMessages.length > 0) {
-			const history = dbMessages
-				.map((m) => `[${m.username}]: ${m.content}`)
-				.join("\n");
 			messages.push({
 				role: "user",
-				content: `## 直近の会話\n${history}`,
+				content: `## 直近の会話\n${formatDbMessages(dbMessages)}`,
 			});
 		}
 		messages.push({
@@ -364,12 +398,9 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 		// チャンネル巡回トリガー
 		const dbMessages = getRecentMessages(ctx.channel.id, 15);
 		if (dbMessages.length > 0) {
-			const history = dbMessages
-				.map((m) => `[${m.username}]: ${m.content}`)
-				.join("\n");
 			messages.push({
 				role: "user",
-				content: `## #${ctx.patrolContext.channelName} の直近の会話\n${history}`,
+				content: `## #${ctx.patrolContext.channelName} の直近の会話\n${formatDbMessages(dbMessages)}`,
 			});
 		}
 		messages.push({
@@ -394,20 +425,14 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 		// ゴールチェックトリガー
 		const dbMessages = getRecentMessages(ctx.channel.id, 5);
 		if (dbMessages.length > 0) {
-			const history = dbMessages
-				.map((m) => `[${m.username}]: ${m.content}`)
-				.join("\n");
 			messages.push({
 				role: "user",
-				content: `## 直近の会話\n${history}`,
+				content: `## 直近の会話\n${formatDbMessages(dbMessages)}`,
 			});
 		}
-		const now = new Date();
 		messages.push({
 			role: "user",
-			content: `現在時刻: ${now.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}
-
-${ctx.goalContext.activeGoalsSummary}
+			content: `${ctx.goalContext.activeGoalsSummary}
 
 目標の進捗を内部的に確認してください。
 やれることは update_goal_progress でメモを残す、complete_goal で完了にする、web_search で調べる程度です。
@@ -419,21 +444,16 @@ ${ctx.goalContext.activeGoalsSummary}
 		// cron 自主発言トリガー（デフォルト）
 		const dbMessages = getRecentMessages(ctx.channel.id, 10);
 		if (dbMessages.length > 0) {
-			const history = dbMessages
-				.map((m) => `[${m.username}]: ${m.content}`)
-				.join("\n");
 			messages.push({
 				role: "user",
-				content: `## 直近の会話\n${history}`,
+				content: `## 直近の会話\n${formatDbMessages(dbMessages)}`,
 			});
 		}
 
 		const goalsPrompt = goalsToPrompt(guildId);
-		const now = new Date();
 		messages.push({
 			role: "user",
-			content: `現在時刻: ${now.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}
-${goalsPrompt ? `\n${goalsPrompt}\n` : ""}
+			content: `${goalsPrompt ? `${goalsPrompt}\n` : ""}
 自由行動タイム。以下から選んでください:
 - web_search で気になることを調べる
 - 目標があれば進捗を確認・更新する

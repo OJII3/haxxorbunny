@@ -31,17 +31,12 @@ const aiAskHandler: ToolHandler = async (args) => {
 	];
 
 	try {
-		const response = await thinkingLlm.chat.completions.create(
-			{
-				model: config.thinking.model,
-				messages,
-				max_tokens: 1024,
-				temperature: 0.7,
-			},
-			{
-				timeout: 30_000,
-			},
-		);
+		const response = await thinkingLlm.chat.completions.create({
+			model: config.thinking.model,
+			messages,
+			max_tokens: 1024,
+			temperature: 0.7,
+		});
 
 		let answer = response.choices[0]?.message?.content ?? "";
 

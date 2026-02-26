@@ -32,7 +32,7 @@ export interface VoiceContext {
 	/** 参加中の人間メンバー名 */
 	participants: string[];
 	/** 直近のトランスクリプト */
-	recentTranscripts: { displayName: string; text: string }[];
+	recentTranscripts: { displayName: string; text: string; timestamp: number }[];
 }
 
 /** エージェントループに渡すコンテキスト */
