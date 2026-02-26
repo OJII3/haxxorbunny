@@ -119,7 +119,7 @@ export async function patrolChannels(): Promise<void> {
 			);
 
 			// DB から直近メッセージを取得
-			const dbMessages = getRecentMessages(target.channel.id, 15);
+			const dbMessages = getRecentMessages(target.channel.id, 20);
 			const patrolMessages = dbMessages.map((m) => ({
 				username: m.username,
 				content: m.content,

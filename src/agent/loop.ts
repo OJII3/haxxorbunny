@@ -349,7 +349,7 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 	} else if (ctx.triggerMessage && ctx.triggeredBy === "triage") {
 		// メッセージトリガー: 直近の会話履歴 + トリガーメッセージ
 		const recentMessages = await ctx.triggerMessage.channel.messages.fetch({
-			limit: 20,
+			limit: 30,
 		});
 		// トリガーメッセージは後で個別に追加するため、履歴から除外して重複を防ぐ
 		const triggerId = ctx.triggerMessage.id;

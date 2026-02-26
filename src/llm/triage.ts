@@ -127,7 +127,7 @@ function buildTriageContext(
 	authorName: string,
 	isMentioned: boolean,
 ): string {
-	const recentMessages = getRecentMessages(channelId, 10);
+	const recentMessages = getRecentMessages(channelId, 20);
 	const lastAction = getLastBotAction(channelId);
 
 	const now = new Date();
@@ -151,7 +151,7 @@ function buildTriageContext(
 ## チャンネル: #${channelName}
 ## 現在時刻: ${formatJSTFull(now)}
 
-## 直近の会話 (最新10件)
+## 直近の会話 (最新20件)
 ${conversationLog || "(なし)"}
 
 ## bot の最後のアクション
@@ -230,6 +230,16 @@ export async function triage(
 		}
 
 		const parsed = JSON.parse(jsonMatch[0]) as TriageResult;
+
+		// 非ホームチャンネルでの react はブロック（ignore にダウングレード）
+		if (parsed.action === "react" && !isHome) {
+			console.log("[triage] react in non-home channel, downgrading to ignore");
+			return {
+				action: "ignore",
+				reasoning: `non-home react blocked: ${parsed.reasoning}`,
+				confidence: parsed.confidence,
+			};
+		}
 
 		// react で emoji がない場合は ignore にフォールバック
 		if (parsed.action === "react" && !parsed.emoji) {
