@@ -41,6 +41,14 @@ export const config = {
 	search: {
 		endpoint: process.env.SEARXNG_URL ?? "",
 	},
+	thinking: {
+		baseUrl:
+			process.env.THINKING_API_BASE_URL ??
+			process.env.LLM_API_BASE_URL ??
+			"https://generativelanguage.googleapis.com/v1beta/openai/",
+		apiKey: process.env.THINKING_API_KEY ?? requiredEnv("GEMINI_API_KEY"),
+		model: process.env.THINKING_MODEL ?? "gemini-3-pro-preview",
+	},
 	voice: {
 		whisperUrl: process.env.WHISPER_URL ?? "http://localhost:8090",
 		voicevoxUrl: process.env.VOICEVOX_URL ?? "http://localhost:50021",
