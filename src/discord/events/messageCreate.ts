@@ -7,7 +7,11 @@ import {
 } from "../../agent/loop.ts";
 import type { AgentContext } from "../../agent/types.ts";
 import { client } from "../../client.ts";
-import { getRecentMessages, saveMessage } from "../../db/queries.ts";
+import {
+	getRecentMessages,
+	saveBotAction,
+	saveMessage,
+} from "../../db/queries.ts";
 import { bufferMessage, setFlushHandler } from "../../llm/message-buffer.ts";
 import { loadPersonality } from "../../llm/prompts/personality.ts";
 import { reflect } from "../../llm/reflection.ts";
@@ -163,6 +167,38 @@ async function processBufferedMessages(
 					combinedContent,
 					authorName,
 					"ignore",
+					ctx,
+				).catch((e) => console.error("[reflection] fire-and-forget error:", e));
+				break;
+			}
+
+			case "react": {
+				if (triageResult.emoji) {
+					try {
+						await lastMessage.react(triageResult.emoji);
+						saveBotAction({
+							guildId,
+							channelId,
+							action: "add_reaction",
+							content: triageResult.emoji,
+							reasoning: triageResult.reasoning,
+							triggeredBy: "triage",
+						});
+						console.log(
+							`[triage] reacted with ${triageResult.emoji} to message in ${channelId}`,
+						);
+					} catch (e) {
+						console.error("[triage] Failed to react:", e);
+					}
+				}
+				// reflection で personality/memory 更新（fire-and-forget）
+				const ctx = buildConversationContext(channelId);
+				reflect(
+					guildId,
+					channelId,
+					combinedContent,
+					authorName,
+					"react",
 					ctx,
 				).catch((e) => console.error("[reflection] fire-and-forget error:", e));
 				break;

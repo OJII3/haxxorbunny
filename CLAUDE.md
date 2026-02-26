@@ -211,9 +211,10 @@ scripts/
 
 ```json
 {
-  "action": "ignore" | "engage",
+  "action": "ignore" | "react" | "engage",
   "reasoning": "判定理由",
-  "confidence": 0.0〜1.0
+  "confidence": 0.0〜1.0,
+  "emoji": "👍"  // action が "react" の場合のみ（Unicode 絵文字1つ）
 }
 ```
 
@@ -221,11 +222,11 @@ scripts/
 
 トリアージの判定方針は `sociability + curiosity` の平均値で3段階に切り替わる:
 
-| 範囲 | 方針 | 説明 |
-|------|------|------|
-| `> 0.7` | 積極的 | 迷ったら engage。面白そうな話題にも参加 |
-| `> 0.4` | 普通 | メンション・直接質問・混乱整理のみ engage |
-| `≤ 0.4` | 控えめ | メンションのみに反応 |
+| 範囲 | 方針 | engage | react | ignore |
+|------|------|--------|-------|--------|
+| `> 0.7` | 積極的 | 迷ったら engage。面白そうな話題にも参加 | 積極的に使う。面白い・共感・応援等 | 完全に無関係な事務連絡のみ |
+| `> 0.4` | 普通 | メンション・直接質問・混乱整理のみ | 発言するほどではないが何か感じた時 | 基本はこちら |
+| `≤ 0.4` | 控えめ | メンションのみに反応 | 非常に印象的な時だけまれに | 基本はこちら |
 
 ### イベントフロー（エージェントループ）
 
@@ -236,6 +237,7 @@ scripts/
                                                            (* メンション時はスロットルをバイパス)
   トリアージ結果:
   ├─ ignore:  reflection LLM(flash, fire-and-forget) → personality + memory 更新
+  ├─ react:   トリガーメッセージに絵文字リアクション付与 → bot_actions ログ → reflection(fire-and-forget)
   └─ engage:  エージェントループ起動 (自動 typing インジケーター開始)
        ├─ LLM に tools 定義 + SURFACE + personality + MEMORY + 会話履歴を送信 (軽量構成, stream:true, max_tokens:2048)
        ├─ ストリーミングでチャンクを受信 → content + tool_calls を蓄積・組み立て
