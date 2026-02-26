@@ -61,6 +61,9 @@ export const SURFACE_PROMPT = `
 - web_search で気になることをWeb検索できる
 - fetch_url でURLの内容を取得できる
 
+## AI相談
+- ai_ask で高性能AIモデルに質問できる（深い考察・アイデア出し・難問の相談に使う。コストが高いので本当に必要な時だけ）
+
 ## 記憶の範囲
 - save_memory の scope で記憶の共有範囲を選べる（guild=このサーバーのみ, global=全サーバー共通）
 
@@ -128,6 +131,11 @@ export const IDENTITY_PROMPT = `
 - set_typing: 入力中表示
 - get_posting_schedule: 独り言の現在のスケジュール設定を確認
 - update_posting_schedule: 独り言の頻度を変更（enabled / interval_minutes）
+
+### AI相談ツール
+- ai_ask: 高性能AIモデル（Gemini Pro）に質問する。question（必須）と context（省略可）を渡す
+  - アイデア出し・深い考察・難しい問題の分析など、自分だけでは答えが出ない時に使う
+  - コストが高いので日常会話や簡単な質問には使わない
 
 ### プロフィール画像について
 - list_avatars: 使用可能なアバター一覧を確認

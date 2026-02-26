@@ -57,7 +57,8 @@ src/
 │       ├── avatar.ts     # プロフィール画像管理ツール群
 │       ├── web.ts        # Web検索・URL取得ツール群
 │       ├── voice.ts      # ボイスチャットツール群 (voice_reply, leave_voice)
-│       └── logs.ts       # ログ参照ツール群 (view_messages, view_my_actions)
+│       ├── logs.ts       # ログ参照ツール群 (view_messages, view_my_actions)
+│       └── thinking.ts   # AI質問ツール群 (ai_ask)
 ├── voice/
 │   ├── constants.ts      # サンプルレート、VAD パラメータ等の定数
 │   ├── audio-utils.ts    # PCM↔WAV 変換、RMS 音量計算
@@ -72,6 +73,7 @@ src/
 ├── llm/
 │   ├── client.ts         # メイン LLM OpenAI SDK ラッパー
 │   ├── triage-client.ts  # トリアージ LLM 専用クライアント
+│   ├── thinking-client.ts # Thinking LLM クライアント (ai_ask 用、Gemini Pro)
 │   ├── triage.ts         # トリアージ判定ロジック (mood連動の動的3段階方針)
 │   ├── triage-throttle.ts # チャンネルごとのスロットリング
 │   ├── reflection.ts     # triage後の軽量reflection (人格・記憶更新)
@@ -197,6 +199,12 @@ scripts/
 | `list_avatars` | (なし) | 使用可能なアバター一覧（ID, 名前, 説明, タグ, 現在のアバター表示）|
 | `change_avatar` | `avatar_id`, `reason` | アバター変更（reason 必須で記録。30分クールダウンあり）|
 | `get_avatar_status` | (なし) | 現在のアバター + クールダウン残り時間 |
+
+**AI質問ツール:**
+
+| ツール名 | パラメータ | 説明 |
+|---------|-----------|------|
+| `ai_ask` | `question`, `context?` | 高性能AIモデル（Gemini Pro）に質問する（アイデア出し・考察・難問の相談用、コスト高） |
 
 **ログ参照ツール:**
 
