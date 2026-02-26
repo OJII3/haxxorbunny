@@ -73,8 +73,10 @@ console.log();
 // 2. ギルドメモリのスキャン
 const guildsDir = join(DATA_DIR, "guilds");
 if (existsSync(guildsDir)) {
-	const guildIds = readdirSync(guildsDir);
-	for (const guildId of guildIds) {
+	const entries = readdirSync(guildsDir, { withFileTypes: true });
+	for (const entry of entries) {
+		if (!entry.isDirectory()) continue;
+		const guildId = entry.name;
 		const memoryPath = join(guildsDir, guildId, "memory.json");
 		if (!existsSync(memoryPath)) continue;
 

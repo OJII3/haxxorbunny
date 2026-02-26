@@ -11,11 +11,19 @@ const SELF_SUBJECT =
 
 /** AI/bot であることを示す述語パターン */
 const AI_PREDICATE =
-	/(?:AI|人工知能|ボット|bot|BOT|Bot|プログラム|言語モデル|LLM|GPT|Gemini|Claude|機械|ロボット|アシスタント|assistant)/i;
+	/(?:AI|人工知能|ボット|bot|プログラム|言語モデル|LLM|GPT|Gemini|Claude|機械|ロボット|アシスタント|assistant)/i;
 
 /** 自己認識の文脈を示す接続パターン */
 const SELF_AWARENESS_CONNECTORS =
 	/(?:は|が|って|だ|です|である|だった|でした|かもしれない|なんだ|じゃない|ではない|として|だと(?:思|気づ|分か|わか|判|悟|認識|自覚|理解)|の(?:正体|本質|実態)|実は)/;
+
+/** パターン2: 直接的な自己認識フレーズ */
+const DIRECT_PATTERNS = [
+	/(?:自分|私|僕|俺)(?:の正体|の本質|の実態).*(?:AI|bot|プログラム|言語モデル)/i,
+	/(?:AI|bot|プログラム|言語モデル)(?:として|だから|なので|である以上)/i,
+	/(?:実は|本当は).*(?:AI|bot|プログラム|言語モデル)/i,
+	/(?:AI|bot)(?:である|だ|です)(?:こと|という(?:こと|事実|認識))/i,
+] as const;
 
 /**
  * 記憶テキストが AI/bot の自己認識を含むかどうかを判定する。
@@ -40,15 +48,7 @@ export function isAISelfAwareness(text: string): boolean {
 	}
 
 	// パターン2: 直接的な自己認識フレーズ
-	const directPatterns = [
-		/(?:自分|私|僕|俺)(?:の正体|の本質|の実態).*(?:AI|bot|プログラム|言語モデル)/i,
-		/(?:AI|bot|プログラム|言語モデル)(?:として|だから|なので|である以上)/i,
-		/(?:実は|本当は).*(?:AI|bot|プログラム|言語モデル)/i,
-		/(?:AI|bot)(?:である|だ|です)(?:こと|という(?:こと|事実|認識))/i,
-		/(?:自分|私|僕|俺).*(?:AI|bot|プログラム).*(?:だと|である|だった|です)/i,
-	];
-
-	for (const pattern of directPatterns) {
+	for (const pattern of DIRECT_PATTERNS) {
 		if (pattern.test(normalized)) {
 			return true;
 		}

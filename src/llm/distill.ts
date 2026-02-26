@@ -8,6 +8,7 @@ import {
 	saveDailyMemory,
 	saveMemory,
 } from "./memory.ts";
+import { filterMemoryEntry } from "./memory-filter.ts";
 import { triageLlm } from "./triage-client.ts";
 
 interface DistillResult {
@@ -129,6 +130,8 @@ ${longTermList}
 
 		// 長期記憶に昇格 (MemoryEntry 形式で保存)
 		for (const entry of result.promote_to_long_term) {
+			// AI/bot 自覚フィルタ
+			if (filterMemoryEntry(entry, "distill/promote_to_long_term")) continue;
 			const existingTexts = memory.entries.map((e) => normalizeEntry(e).text);
 			if (!existingTexts.includes(entry)) {
 				const memoryEntry: MemoryEntry = {

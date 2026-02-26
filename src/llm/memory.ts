@@ -348,11 +348,10 @@ export function processMemoryFields(
 		user_note?: string | null;
 	},
 ): void {
-	if (fields.memory_entry) {
-		// AI/bot 自覚フィルタ（appendMemoryEntry 内でもチェックされるが、ログの明確化のため）
-		if (filterMemoryEntry(fields.memory_entry, "processMemoryFields")) {
-			return;
-		}
+	if (
+		fields.memory_entry &&
+		!filterMemoryEntry(fields.memory_entry, "processMemoryFields")
+	) {
 		appendMemoryEntry(guildId, fields.memory_entry);
 	}
 	if (fields.user_note) {
