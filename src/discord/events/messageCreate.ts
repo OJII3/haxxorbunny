@@ -189,6 +189,14 @@ async function processBufferedMessages(
 						);
 					} catch (e) {
 						console.error("[triage] Failed to react:", e);
+						saveBotAction({
+							guildId,
+							channelId,
+							action: "add_reaction",
+							content: `FAILED: ${triageResult.emoji}`,
+							reasoning: triageResult.reasoning,
+							triggeredBy: "triage",
+						});
 					}
 				}
 				// reflection で personality/memory 更新（fire-and-forget）
