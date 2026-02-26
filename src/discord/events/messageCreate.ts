@@ -163,6 +163,7 @@ async function processBufferedMessages(
 			authorName,
 			hasMention,
 			personality.mood,
+			{ guildId },
 		);
 
 		console.log(

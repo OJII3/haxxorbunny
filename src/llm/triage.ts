@@ -1,8 +1,12 @@
 import { config } from "../config.ts";
 import { getLastBotAction, getRecentMessages } from "../db/queries.ts";
 import { formatJSTFull, formatJSTShort } from "../utils/time.ts";
+import { isHomeChannel } from "./home-channels.ts";
 import type { MoodState } from "./prompts/personality.ts";
 import { triageLlm } from "./triage-client.ts";
+
+/** 非ホームチャンネルでの sociability+curiosity 平均値へのペナルティ */
+const NON_HOME_PENALTY = 0.3;
 
 export interface TriageResult {
 	action: "ignore" | "react" | "engage";
@@ -14,8 +18,16 @@ export interface TriageResult {
 /**
  * mood の sociability + curiosity の平均で3段階の方針を切り替える
  */
-function buildTriageSystemPrompt(mood?: MoodState): string {
-	const avg = mood ? (mood.sociability + mood.curiosity) / 2 : 0.5;
+function buildTriageSystemPrompt(
+	mood?: MoodState,
+	options?: { isHome: boolean },
+): string {
+	let avg = mood ? (mood.sociability + mood.curiosity) / 2 : 0.5;
+
+	// 非ホームチャンネルではペナルティを適用して控えめにする
+	if (options && !options.isHome) {
+		avg = Math.max(0, avg - NON_HOME_PENALTY);
+	}
 
 	let policySection: string;
 
@@ -157,6 +169,7 @@ export async function triage(
 	authorName: string,
 	isMentioned: boolean,
 	mood?: MoodState,
+	options?: { guildId?: string },
 ): Promise<TriageResult> {
 	const context = buildTriageContext(
 		channelId,
@@ -166,7 +179,13 @@ export async function triage(
 		isMentioned,
 	);
 
-	const systemPrompt = buildTriageSystemPrompt(mood);
+	// ホームチャンネル判定（メンション時はペナルティなし）
+	let isHome = true;
+	if (options?.guildId) {
+		isHome = isMentioned ? true : isHomeChannel(options.guildId, channelId);
+	}
+
+	const systemPrompt = buildTriageSystemPrompt(mood, { isHome });
 
 	try {
 		const response = await triageLlm.chat.completions.create({
