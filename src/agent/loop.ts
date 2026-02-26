@@ -1,16 +1,10 @@
 import type { Message } from "discord.js";
 import type { ChatCompletionContentPart } from "openai/resources/chat/completions";
-import { client } from "../client.ts";
 import { config } from "../config.ts";
-import {
-	getRecentMessages,
-	saveBotAction,
-	saveMessage,
-} from "../db/queries.ts";
+import { getRecentMessages, saveBotAction } from "../db/queries.ts";
 import { llm } from "../llm/client.ts";
 import { goalsToPrompt } from "../llm/goals.ts";
 import { loadGlobalMemory, loadMemory, memoryToPrompt } from "../llm/memory.ts";
-import { isDuplicate, recordMessage } from "../llm/message-dedup.ts";
 import {
 	loadPersonality,
 	personalityToPrompt,
@@ -453,6 +447,7 @@ ${goalsPrompt ? `\n${goalsPrompt}\n` : ""}
 	const executedTools: string[] = [];
 	let messageSent = false;
 	let shouldStop = false;
+	let textOnlyRetries = 0;
 
 	// voice モード: イテレーション数とパラメータを調整
 	const maxIter = isVoiceMode ? 3 : MAX_ITERATIONS;
@@ -644,59 +639,33 @@ ${goalsPrompt ? `\n${goalsPrompt}\n` : ""}
 					: undefined,
 		});
 
-		// ツール呼び出しがなければ、テキストを send_message で送信（reply ではなく）
-		// voice モード時はフォールバック送信しない（voice_reply ツール経由で話すべき）
+		// ツール呼び出しがなければ、リトライを要求
+		// LLM は必ずツール経由で行動する必要がある
 		if (functionToolCalls.length === 0) {
-			let textContent = assistantMessage.content?.trim();
-			// LLM が会話履歴の [name]: フォーマットを真似してプレフィックスを付けるケースを除去
-			// 複数行にわたって付けるケースにも対応（各行頭 + 複数メッセージを模倣するケース）
-			// NOTE: 行頭の [任意テキスト]: パターンは全て除去されるため、正当なコンテンツにも影響しうる
-			if (textContent) {
-				textContent = textContent.replace(/^\[[^\]]+\]:\s*/gm, "").trim();
+			textOnlyRetries++;
+			if (textOnlyRetries > 1) {
+				// 2回連続テキスト応答は打ち切り
+				console.warn(
+					`[agent] Giving up after ${textOnlyRetries} consecutive text-only responses`,
+				);
+				break;
 			}
-			if (
-				textContent &&
-				!messageSent &&
-				!isVoiceMode &&
-				ctx.channel.isSendable()
-			) {
-				// cron トリガー時は重複チェック
-				if (ctx.triggeredBy === "cron" && isDuplicate(guildId, textContent)) {
-					console.log(
-						"[agent] Fallback blocked by dedup:",
-						textContent.slice(0, 50),
-					);
-				} else {
-					console.log(
-						"[agent] Fallback: sending text as send_message (not reply):",
-						textContent.slice(0, 100),
-					);
-					try {
-						await ctx.channel.send({
-							content: textContent,
-							allowedMentions: { parse: [] },
-						});
-						recordMessage(guildId, textContent);
-						saveMessage({
-							guildId,
-							channelId: ctx.channel.id,
-							userId: client.user?.id ?? "bot",
-							username: client.user?.displayName ?? "bot",
-							content: textContent,
-							isBot: true,
-						});
-						executedTools.push("send_message(fallback)");
-						messageSent = true;
-					} catch (e) {
-						console.error("[agent] Fallback send failed:", e);
-					}
-				}
-			}
-			console.log(
-				`[agent] Finished after ${i + 1} iteration(s) (no tool calls)`,
+			console.warn(
+				`[agent] Text-only response detected (attempt ${textOnlyRetries}), requesting tool use retry`,
 			);
-			break;
+			messages.push({
+				role: "user",
+				content:
+					"エラー: テキスト応答は無効です。必ずツール（関数呼び出し）を使って行動してください。\n" +
+					"- メッセージを送りたい場合: send_message または reply_to_message ツールを使う\n" +
+					"- 何もしない場合: do_nothing ツールを使う\n" +
+					"テキストを直接返さず、ツールを呼び出してください。",
+			});
+			continue;
 		}
+
+		// ツール使用成功: テキストリトライカウンターをリセット
+		textOnlyRetries = 0;
 
 		// 各ツールを実行
 		for (const toolCall of functionToolCalls) {
