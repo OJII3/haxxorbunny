@@ -6,6 +6,7 @@ import {
 import { client } from "../../client.ts";
 import { saveMessage } from "../../db/queries.ts";
 import { isDuplicate, recordMessage } from "../../llm/message-dedup.ts";
+import { formatJSTShort } from "../../utils/time.ts";
 import type { ToolDefinition, ToolHandler, ToolResult } from "../types.ts";
 
 // ── helpers ──
@@ -192,7 +193,10 @@ const fetchMessages: ToolHandler = async (args, ctx) => {
 		const msgs = await textCh.messages.fetch({ limit });
 		const formatted = [...msgs.values()]
 			.reverse()
-			.map((m) => `[${m.author.displayName}]: ${m.content}`)
+			.map((m) => {
+				const time = formatJSTShort(new Date(m.createdTimestamp));
+				return `[${time} ${m.author.displayName}]: ${m.content}`;
+			})
 			.join("\n");
 		return ok(formatted || "(no messages)");
 	} catch {
