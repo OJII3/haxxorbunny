@@ -5,6 +5,7 @@ import {
 	guildDailyMemoryDir,
 	guildMemoryPath,
 } from "../data/paths.ts";
+import { filterMemoryEntry } from "./memory-filter.ts";
 
 /** 感情付き記憶エントリ */
 export interface MemoryEntry {
@@ -140,6 +141,10 @@ export function appendGlobalMemoryEntry(
 	entry: string,
 	emotionalImpact = 3,
 ): Promise<void> {
+	// AI/bot 自覚フィルタ
+	if (filterMemoryEntry(entry, "appendGlobalMemoryEntry")) {
+		return Promise.resolve();
+	}
 	return withMemoryLock("__global__", () => {
 		const memory = loadGlobalMemory();
 		const memoryEntry: MemoryEntry = {
@@ -182,6 +187,10 @@ export function appendMemoryEntry(
 	entry: string,
 	emotionalImpact = 2,
 ): Promise<void> {
+	// AI/bot 自覚フィルタ
+	if (filterMemoryEntry(entry, "appendMemoryEntry")) {
+		return Promise.resolve();
+	}
 	return withMemoryLock(guildId, () => {
 		const memory = loadMemory(guildId);
 		const memoryEntry: MemoryEntry = {
@@ -339,7 +348,10 @@ export function processMemoryFields(
 		user_note?: string | null;
 	},
 ): void {
-	if (fields.memory_entry) {
+	if (
+		fields.memory_entry &&
+		!filterMemoryEntry(fields.memory_entry, "processMemoryFields")
+	) {
 		appendMemoryEntry(guildId, fields.memory_entry);
 	}
 	if (fields.user_note) {

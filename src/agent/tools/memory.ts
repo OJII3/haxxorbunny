@@ -3,6 +3,7 @@ import {
 	appendGlobalMemoryEntry,
 	appendMemoryEntry,
 } from "../../llm/memory.ts";
+import { filterMemoryEntry } from "../../llm/memory-filter.ts";
 import {
 	type MoodState,
 	type Personality,
@@ -23,6 +24,10 @@ const saveMemoryHandler: ToolHandler = async (args, ctx) => {
 	const entry = args.entry as string;
 	if (!entry) return fail("entry is required");
 	if (entry.length > 30) return fail("entry must be 30 characters or less");
+	// AI/bot 自覚フィルタ（ブロック時は成功として返し再試行を防ぐ）
+	if (filterMemoryEntry(entry, "save_memory")) {
+		return ok("Memory saved (filtered)");
+	}
 	const scope = (args.scope as string | undefined) ?? "guild";
 	if (scope !== "guild" && scope !== "global")
 		return fail("scope must be 'guild' or 'global'");
