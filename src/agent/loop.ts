@@ -322,7 +322,10 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 		// ボイスチャットトリガー
 		const vc = ctx.voiceContext;
 		const transcriptHistory = vc.recentTranscripts
-			.map((t) => `[${t.displayName}]: ${t.text}`)
+			.map((t) => {
+				const time = formatJSTShort(new Date(t.timestamp));
+				return `[${time} ${t.displayName}]: ${t.text}`;
+			})
 			.join("\n");
 
 		messages.push({
