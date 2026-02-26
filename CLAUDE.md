@@ -80,6 +80,7 @@ src/
 │   ├── triage-throttle.ts # チャンネルごとのスロットリング
 │   ├── reflection.ts     # triage後の軽量reflection (人格・記憶更新)
 │   ├── memory.ts         # 記憶管理 (ギルド + グローバル CRUD/toPrompt + 感情スコアリング)
+│   ├── memory-filter.ts  # AI/bot 自覚記憶フィルタ (isAISelfAwareness, filterMemoryEntry)
 │   ├── goals.ts          # ゴール管理 (CRUD + goalsToPrompt)
 │   ├── heartbeat.ts      # 定期タスク管理 + アクティブ時間帯判定
 │   ├── distill.ts        # 記憶蒸留 (日次→長期)
@@ -118,7 +119,8 @@ data/
 ├── haxxorbunny.db        # SQLite DB (gitignore)
 scripts/
 ├── migrate-to-guild.ts       # 既存データ移行スクリプト
-└── migrate-global-memory.ts  # ギルド記憶→グローバル記憶の分類移行スクリプト
+├── migrate-global-memory.ts  # ギルド記憶→グローバル記憶の分類移行スクリプト
+└── sanitize-memory.ts        # AI/bot 自覚記憶のサニタイズスクリプト (--dry-run 対応)
 ```
 
 ## アーキテクチャ
@@ -317,6 +319,8 @@ cron (2時間) — 低頻度タスク
 - **連結 JSON 展開**: LLM が tool_call の arguments に複数の JSON オブジェクトを連結して返すケース（`{...}{...}`）に対応。`parseAllJsonObjects` が全オブジェクトを抽出し、`inferToolNameFromArgs` が各オブジェクトの引数キーからツール定義をスコアリングしてツール名を推定。エージェントループで個別の tool_call として展開・実行する。`parseToolArguments` は安全弁として先頭オブジェクトのみ返すフォールバックを維持
 - **メンション禁止（多層防御）**: bot が他のユーザーを `<@userId>` 形式でメンションしないよう、プロンプト（SOUL/SURFACE/IDENTITY の3層）で指示 + コードレベルで `allowedMentions: { parse: [] }` を全メッセージ送信（send/reply/edit）に適用。LLM がプロンプトを無視した場合でも Discord API レベルでメンションが無効化される
 - **画像読み取り**: メッセージに添付された画像（png/jpeg/gif/webp）を OpenAI SDK の `content` 配列形式（`text` + `image_url` パーツ）で LLM に渡す。1メッセージ最大4枚、`detail: "low"` でトークン節約。DB には `[画像: filename]` としてテキスト追記。トリアージ LLM には画像を渡さず、テキストで画像がある旨を伝える
+- **AI/bot 自覚記憶フィルタ（多層防御）**: bot が「自分は AI/bot」という自己認識を記憶に保存しないよう、多層で防御。①プロンプト層（SOUL/SURFACE/IDENTITY + 蒸留/夢/リフレクション各プロンプト）で指示、②コード層（`memory-filter.ts` の `isAISelfAwareness` 関数）で `save_memory` ツール・`appendMemoryEntry`・`appendGlobalMemoryEntry`・`processMemoryFields` の全入口をフィルタリング。「AI の話題で盛り上がった」等の話題言及は許可し、主語が自分かつ述語が AI/bot のパターンのみブロック。ブロック時は silent に成功を返し LLM の再試行を防止。既存データの一括サニタイズは `bun run scripts/sanitize-memory.ts [--dry-run]`
+- **AIアシスタント的振る舞い禁止**: 「何かお手伝いできますか？」等のカスタマーサポート的対応をプロンプト（SURFACE/IDENTITY）で禁止。サービス提供者ではなく人間として会話する
 
 ### ギルドごとのデータ分離
 
