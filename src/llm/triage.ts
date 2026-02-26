@@ -4,9 +4,10 @@ import type { MoodState } from "./prompts/personality.ts";
 import { triageLlm } from "./triage-client.ts";
 
 export interface TriageResult {
-	action: "ignore" | "engage";
+	action: "ignore" | "react" | "engage";
 	reasoning: string;
 	confidence: number;
+	emoji?: string;
 }
 
 /**
@@ -21,12 +22,18 @@ function buildTriageSystemPrompt(mood?: MoodState): string {
 		// 積極的: 迷ったら engage
 		policySection = `## 判定基準 — 積極的に参加する
 - engage: 基本はこちら。会話に参加できそうなら積極的に加わる
+- react: 発言するほどではないが、面白い・共感・応援などを感じたら絵文字リアクションを付ける。積極的に使ってOK
 - ignore: 以下の条件に該当する場合のみ
 
 ## ignore すべき場面
 1. **完全に無関係**: 自分に全く関係ない事務連絡
 2. **邪魔になる**: 真剣な議論に茶々を入れることになる場合
 3. **直前に発言済み**: ごく最近発言したばかりで連投になる場合
+
+## react すべき場面
+1. **面白い・共感する**: 会話に参加するほどではないが、何か感じた時
+2. **応援したい**: 誰かが頑張っている、成果を出した時
+3. **acknowledge したい**: 読んだよ、という気持ちを伝えたい時
 
 ## engage すべき場面
 1. **メンションされている**: ほぼ確実に engage
@@ -37,12 +44,19 @@ function buildTriageSystemPrompt(mood?: MoodState): string {
 
 ## 基本方針
 - **積極的**であること。迷ったら engage を選ぶ
-- 話しかけられていなくても、面白そうなら参加する`;
+- 話しかけられていなくても、面白そうなら参加する
+- react は engage するほどでもない時の軽い反応手段`;
 	} else if (avg > 0.4) {
 		// 普通: 既存と同等
 		policySection = `## 判定基準 — 必要なときに参加する
 - ignore: 基本はこちら。普通の会話には割り込まない
+- react: 発言するほどではないが何か感じた時に、絵文字リアクションを付ける
 - engage: 以下の条件に該当する場合のみ
+
+## react すべき場面
+1. **共感・面白い**: 発言に対して何か感じたが、わざわざ返信するほどではない時
+2. **応援・お祝い**: 成果報告や頑張りに対してリアクションしたい時
+3. **acknowledge**: 話題を見た、読んだことを伝えたい時
 
 ## engage すべき場面
 1. **メンションされている**: bot に直接話しかけられている場合（ほぼ確実に engage）
@@ -53,19 +67,25 @@ function buildTriageSystemPrompt(mood?: MoodState): string {
 ## 基本方針
 - **控えめ**であること。迷ったら ignore を選ぶ
 - 普通の雑談、盛り上がっている会話、独り言には割り込まない
-- 自分が参加しなくても会話が成立する場合は ignore`;
+- 自分が参加しなくても会話が成立する場合は ignore
+- react は engage するほどでもないが完全に無視もしたくない時に使う`;
 	} else {
 		// 控えめ: メンションのみ
 		policySection = `## 判定基準 — メンションのみに反応する
 - ignore: 基本はこちら。メンション以外には反応しない
+- react: 非常に印象的なメッセージにだけ、まれに絵文字リアクションを付ける
 - engage: メンション時のみ
+
+## react すべき場面
+1. **非常に印象的**: 強い感情が動いた時だけ。頻度は低くてよい
 
 ## engage すべき場面
 1. **メンションされている**: bot に直接話しかけられている場合のみ engage
 
 ## 基本方針
 - **非常に控えめ**であること。メンション以外は基本的に ignore
-- 今は一人でいたい気分なので、積極的に会話に参加しない`;
+- 今は一人でいたい気分なので、積極的に会話に参加しない
+- react もめったに使わない。本当に印象的な時だけ`;
 	}
 
 	return `
@@ -81,7 +101,9 @@ ${policySection}
 
 ## 応答フォーマット
 JSON のみを返すこと。それ以外のテキストは一切不要。reasoning は10字以内。
-{"action":"ignore","reasoning":"理由","confidence":0.8}
+- ignore/engage の場合: {"action":"ignore","reasoning":"理由","confidence":0.8}
+- react の場合: {"action":"react","reasoning":"理由","confidence":0.7,"emoji":"👍"}
+  - emoji は Unicode 絵文字1つを指定すること（カスタム絵文字は使えない）
 `.trim();
 }
 
@@ -179,6 +201,19 @@ export async function triage(
 		}
 
 		const parsed = JSON.parse(jsonMatch[0]) as TriageResult;
+
+		// react で emoji がない場合は ignore にフォールバック
+		if (parsed.action === "react" && !parsed.emoji) {
+			console.warn(
+				"[triage] react action without emoji, falling back to ignore",
+			);
+			return {
+				action: "ignore",
+				reasoning: parsed.reasoning,
+				confidence: parsed.confidence,
+			};
+		}
+
 		return parsed;
 	} catch (error) {
 		console.error("[triage] Error:", error);

@@ -9,7 +9,7 @@
 	"mood": {
 		"energy": 0.3,
 		"positivity": 0.5,
-		"sociability": 0.3,
+		"sociability": 0.5,
 		"curiosity": 0.5
 	},
 	"recent_topics": [],
