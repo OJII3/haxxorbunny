@@ -649,8 +649,9 @@ ${goalsPrompt ? `\n${goalsPrompt}\n` : ""}
 		if (functionToolCalls.length === 0) {
 			let textContent = assistantMessage.content?.trim();
 			// LLM が会話履歴の [name]: フォーマットを真似してプレフィックスを付けるケースを除去
+			// 複数行にわたって付けるケースにも対応（各行頭 + 複数メッセージを模倣するケース）
 			if (textContent) {
-				textContent = textContent.replace(/^\[[^\]]+\]:\s*/, "").trim();
+				textContent = textContent.replace(/^\[[^\]]+\]:\s*/gm, "").trim();
 			}
 			if (
 				textContent &&

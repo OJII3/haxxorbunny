@@ -1,4 +1,9 @@
-import { ChannelType, type Guild, type TextChannel } from "discord.js";
+import {
+	ChannelType,
+	type Guild,
+	PermissionFlagsBits,
+	type TextChannel,
+} from "discord.js";
 import { isAgentBusyForGuild, runAgentLoop } from "../agent/loop.ts";
 import type { AgentContext } from "../agent/types.ts";
 import { client } from "../client.ts";
@@ -30,6 +35,15 @@ async function scanChannelsForGuild(guild: Guild): Promise<PatrolCandidate[]> {
 
 	for (const [, ch] of textChannels) {
 		const textChannel = ch as TextChannel;
+
+		// bot にアクセス権がないチャンネルはスキップ
+		const perms = textChannel.permissionsFor(botId);
+		if (
+			!perms?.has(PermissionFlagsBits.ViewChannel) ||
+			!perms?.has(PermissionFlagsBits.ReadMessageHistory)
+		) {
+			continue;
+		}
 
 		try {
 			const recentMessages = await textChannel.messages.fetch({ limit: 5 });
