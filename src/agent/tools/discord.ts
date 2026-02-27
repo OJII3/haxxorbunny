@@ -1,13 +1,12 @@
 import {
 	ChannelType,
 	type GuildTextBasedChannel,
-	PermissionFlagsBits,
 	type TextChannel,
 } from "discord.js";
 import { client } from "../../client.ts";
 import { saveMessage } from "../../db/queries.ts";
 import { isDuplicate, recordMessage } from "../../llm/message-dedup.ts";
-import { hasChannelPerms } from "../../utils/permissions.ts";
+import { canSendTyping } from "../../utils/permissions.ts";
 import { formatJSTShort } from "../../utils/time.ts";
 import type { ToolDefinition, ToolHandler, ToolResult } from "../types.ts";
 
@@ -266,28 +265,11 @@ const listChannels: ToolHandler = async (_args, ctx) => {
 
 const setTyping: ToolHandler = async (_args, ctx) => {
 	try {
-		if (!("sendTyping" in ctx.channel)) {
-			return fail("Channel does not support typing indicator");
+		const botId = ctx.guild.members.me?.id;
+		if (!botId || !canSendTyping(ctx.channel, botId, ctx.guild)) {
+			return fail("Missing SendMessages permission in this channel");
 		}
-		// GuildText / GuildAnnouncement の場合は SendMessages 権限をチェック
-		if (
-			"type" in ctx.channel &&
-			(ctx.channel.type === ChannelType.GuildText ||
-				ctx.channel.type === ChannelType.GuildAnnouncement)
-		) {
-			const botId = ctx.guild.members.me?.id;
-			if (
-				!botId ||
-				!hasChannelPerms(
-					ctx.channel as TextChannel,
-					botId,
-					PermissionFlagsBits.SendMessages,
-				)
-			) {
-				return fail("Missing SendMessages permission in this channel");
-			}
-		}
-		await (ctx.channel as TextChannel).sendTyping();
+		await (ctx.channel as { sendTyping: () => Promise<void> }).sendTyping();
 		return ok("Typing indicator sent");
 	} catch {
 		return fail("Failed to send typing indicator");

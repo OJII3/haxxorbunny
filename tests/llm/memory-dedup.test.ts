@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
-	type MemoryEntry,
 	findDuplicateIndex,
+	type MemoryEntry,
 	normalizeTextForComparison,
 } from "../../src/llm/memory.ts";
 
@@ -46,9 +46,9 @@ describe("normalizeTextForComparison", () => {
 		expect(normalizeTextForComparison("今日は良い天気ですね！")).toBe(
 			"今日は良い天気ですね",
 		);
-		expect(
-			normalizeTextForComparison("プログラミング・勉強・読書が好き"),
-		).toBe("プログラミング勉強読書が好き");
+		expect(normalizeTextForComparison("プログラミング・勉強・読書が好き")).toBe(
+			"プログラミング勉強読書が好き",
+		);
 		expect(normalizeTextForComparison("テスト（test）")).toBe("テストtest");
 	});
 

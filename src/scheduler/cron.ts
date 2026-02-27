@@ -31,7 +31,7 @@ function selectChannel(guild: Guild): TextChannel | undefined {
 		if (
 			ch?.type === ChannelType.GuildText &&
 			hasChannelPerms(
-				ch as TextChannel,
+				ch,
 				botId,
 				PermissionFlagsBits.ViewChannel,
 				PermissionFlagsBits.SendMessages,
@@ -44,7 +44,7 @@ function selectChannel(guild: Guild): TextChannel | undefined {
 		(ch) =>
 			ch.type === ChannelType.GuildText &&
 			hasChannelPerms(
-				ch as TextChannel,
+				ch,
 				botId,
 				PermissionFlagsBits.ViewChannel,
 				PermissionFlagsBits.SendMessages,
