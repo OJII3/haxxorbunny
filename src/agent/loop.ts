@@ -346,6 +346,44 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 				content: `## 直近の会話（音声）\n${transcriptHistory}`,
 			});
 		}
+	} else if (
+		ctx.triggerMessage &&
+		ctx.triggeredBy === "triage-react" &&
+		ctx.triageReactContext
+	) {
+		// triage-react トリガー: 会話を読んでリアクションするか判断する
+		const recentMessages = await ctx.triggerMessage.channel.messages.fetch({
+			limit: 15,
+		});
+		const triggerId = ctx.triggerMessage.id;
+		const history = buildConversationHistory(
+			[...recentMessages.values()].filter((m) => m.id !== triggerId).reverse(),
+		);
+		for (const msg of history) {
+			messages.push(msg);
+		}
+		const triggerTime = formatJSTShort(
+			new Date(ctx.triggerMessage.createdTimestamp),
+		);
+		const triggerText = `[${triggerTime} ${ctx.triggerMessage.author.displayName}]: ${ctx.triggerMessage.content}`;
+		const triggerImageParts = extractImageParts(ctx.triggerMessage);
+		messages.push({
+			role: "user",
+			content:
+				triggerImageParts.length > 0
+					? [{ type: "text" as const, text: triggerText }, ...triggerImageParts]
+					: triggerText,
+		});
+		messages.push({
+			role: "system",
+			content: `トリアージ判定で「何か感じた」と判定されました（理由: ${ctx.triageReactContext.reasoning}）。
+このメッセージに対してどう反応するか決めてください。
+
+- 何か感じたら add_reaction で絵文字リアクションを付ける（Unicode 絵文字1つ）
+- 印象的だったら save_memory で記憶に残す
+- 特に何も感じなければ do_nothing
+- メッセージ送信（send_message / reply_to_message）は基本不要。本当に返信したい時のみ`,
+		});
 	} else if (ctx.triggerMessage && ctx.triggeredBy === "triage") {
 		// メッセージトリガー: 直近の会話履歴 + トリガーメッセージ
 		const recentMessages = await ctx.triggerMessage.channel.messages.fetch({
@@ -469,8 +507,9 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 	let shouldStop = false;
 	let textOnlyRetries = 0;
 
-	// voice モード: イテレーション数とパラメータを調整
-	const maxIter = isVoiceMode ? 3 : MAX_ITERATIONS;
+	// voice / triage-react モード: イテレーション数とパラメータを調整
+	const isReactMode = ctx.triggeredBy === "triage-react";
+	const maxIter = isVoiceMode ? 3 : isReactMode ? 3 : MAX_ITERATIONS;
 	const temperature = isVoiceMode ? 0.6 : 0.8;
 	const activeToolSpecs = isVoiceMode ? voiceToolSpecs : toolSpecs;
 
