@@ -29,7 +29,8 @@ function hasRequiredPerms(ch: TextChannel, botId: string): boolean {
 }
 
 function selectChannel(guild: Guild): TextChannel | undefined {
-	const botId = guild.client.user?.id ?? "";
+	const botId = guild.client.user?.id;
+	if (!botId) return undefined;
 	const activeIds = getActiveChannelIds(guild.id);
 	for (const id of activeIds) {
 		const ch = guild.channels.cache.get(id);

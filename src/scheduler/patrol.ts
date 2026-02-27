@@ -135,9 +135,8 @@ export async function patrolChannels(): Promise<void> {
 			);
 
 			// リアクションの適用（最大2件、AddReactions 権限がある場合のみ）
-			const reactionPerms = target.channel.permissionsFor(
-				client.user?.id ?? "",
-			);
+			const botId = client.user?.id;
+			const reactionPerms = botId ? target.channel.permissionsFor(botId) : null;
 			if (
 				result?.reactions &&
 				result.reactions.length > 0 &&
