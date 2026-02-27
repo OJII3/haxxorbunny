@@ -271,10 +271,13 @@ scripts/
 ### イベントフロー（エージェントループ）
 
 ```
-メッセージ受信 → DB保存 → Bot除外 → markActivity → デバウンスバッファ(3秒)
+メッセージ受信 → Bot→DB保存のみ → メンション判定 → ホームCH外+非メンション+非botリプライ→スキップ(**)
+                                                    ↓ (それ以外)
+                                       DB保存 → markActivity → デバウンスバッファ(3秒)
                                                     ↓ (追加メッセージなし or 15秒超過)
                                        結合コンテンツ生成 → スロットル判定(*) → トリアージLLM(mood連動) → 判定
                                                            (* メンション時はスロットルをバイパス)
+                                                           (** DB保存もトリアージも完全スキップ)
   トリアージ結果:
   ├─ ignore:  reflection LLM(flash, fire-and-forget) → personality + memory 更新
   ├─ react:   トリガーメッセージに絵文字リアクション付与 → bot_actions ログ → reflection(fire-and-forget)
