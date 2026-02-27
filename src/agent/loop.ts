@@ -9,7 +9,7 @@ import {
 	loadPersonality,
 	personalityToPrompt,
 } from "../llm/prompts/personality.ts";
-import { SURFACE_PROMPT } from "../llm/prompts/system.ts";
+import { SYSTEM_PROMPT } from "../llm/prompts/system.ts";
 import {
 	lockChannel,
 	markChannelResponded,
@@ -287,8 +287,8 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 	const globalMemory = loadGlobalMemory();
 	const memoryPrompt = memoryToPrompt(memory, globalMemory);
 
-	// 軽量構成: SURFACE → personality → memory (詳細は recall_identity ツールで参照)
-	const systemPrompt = `${SURFACE_PROMPT}\n\n${personalityPrompt}\n${memoryPrompt}`;
+	// 統合 SYSTEM_PROMPT + personality + memory
+	const systemPrompt = `${SYSTEM_PROMPT}\n\n${personalityPrompt}\n${memoryPrompt}`;
 
 	// 会話履歴を構築
 	const messages: Array<{

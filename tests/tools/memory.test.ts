@@ -6,7 +6,6 @@ import {
 	globalPersonalityPath,
 	guildMemoryPath,
 } from "../../src/data/paths.ts";
-import { IDENTITY_PROMPT, SOUL_PROMPT } from "../../src/llm/prompts/system.ts";
 import { createMockContext } from "../helpers/mock-context.ts";
 import { createTestTables } from "../helpers/test-db.ts";
 
@@ -152,20 +151,6 @@ describe("save_user_note", () => {
 
 		const result = await handler({ username: "", note: "" }, ctx);
 		expect(result.success).toBe(false);
-	});
-});
-
-describe("recall_identity", () => {
-	test("SOUL_PROMPT と IDENTITY_PROMPT を返す", async () => {
-		const handler = getHandler("recall_identity");
-		const ctx = createMockContext({
-			guild: { id: GUILD_ID } as never,
-		});
-
-		const result = await handler({}, ctx);
-		expect(result.success).toBe(true);
-		expect(result.result).toContain(SOUL_PROMPT);
-		expect(result.result).toContain(IDENTITY_PROMPT);
 	});
 });
 
