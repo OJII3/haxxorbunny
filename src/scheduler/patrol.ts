@@ -134,8 +134,15 @@ export async function patrolChannels(): Promise<void> {
 				patrolMessages,
 			);
 
-			// リアクションの適用（最大2件）
-			if (result?.reactions && result.reactions.length > 0) {
+			// リアクションの適用（最大2件、AddReactions 権限がある場合のみ）
+			const reactionPerms = target.channel.permissionsFor(
+				client.user?.id ?? "",
+			);
+			if (
+				result?.reactions &&
+				result.reactions.length > 0 &&
+				reactionPerms?.has(PermissionFlagsBits.AddReactions)
+			) {
 				try {
 					const discordMessages = await target.channel.messages.fetch({
 						limit: 15,
