@@ -29,6 +29,8 @@ const MAX_INTERVAL = 10080;
 const MAX_CUSTOM_TASKS = 5;
 /** プロンプト最大長 */
 const MAX_PROMPT_LENGTH = 500;
+/** 説明の最大長 */
+const MAX_DESCRIPTION_LENGTH = 100;
 /** タスクID パターン */
 const TASK_ID_PATTERN = /^[a-z][a-z0-9_]{1,30}$/;
 
@@ -52,7 +54,9 @@ const listTasksHandler: ToolHandler = async () => {
 		const status = t.enabled ? "有効" : "無効";
 		const type = t.type === "custom" ? "カスタム" : "ビルトイン";
 		const lastExec = t.last_executed ?? "未実行";
-		let line = `- ${t.id} [${type}] (${status}): ${t.description} | 間隔: ${t.interval_minutes}分 | 最終実行: ${lastExec}`;
+		const activeHours =
+			t.require_active_hours === false ? "24時間" : "アクティブ時間のみ";
+		let line = `- ${t.id} [${type}] (${status}): ${t.description} | 間隔: ${t.interval_minutes}分 | ${activeHours} | 最終実行: ${lastExec}`;
 		if (t.prompt) {
 			line += ` | プロンプト: ${t.prompt.slice(0, 50)}${t.prompt.length > 50 ? "…" : ""}`;
 		}
@@ -68,6 +72,7 @@ const updateTaskHandler: ToolHandler = async (args) => {
 	const intervalMinutes = args.interval_minutes as number | undefined;
 	const description = args.description as string | undefined;
 	const prompt = args.prompt as string | undefined;
+	const requireActiveHours = args.require_active_hours as boolean | undefined;
 
 	if (!taskId) return fail("task_id is required");
 
@@ -93,6 +98,15 @@ const updateTaskHandler: ToolHandler = async (args) => {
 
 	if (prompt !== undefined && prompt.length > MAX_PROMPT_LENGTH) {
 		return fail(`prompt は ${MAX_PROMPT_LENGTH} 文字以内にしてください`);
+	}
+
+	if (
+		description !== undefined &&
+		description.length > MAX_DESCRIPTION_LENGTH
+	) {
+		return fail(
+			`description は ${MAX_DESCRIPTION_LENGTH} 文字以内にしてください`,
+		);
 	}
 
 	// バリデーション通過後に変更を適用
@@ -123,6 +137,14 @@ const updateTaskHandler: ToolHandler = async (args) => {
 		);
 	}
 
+	if (
+		requireActiveHours !== undefined &&
+		requireActiveHours !== task.require_active_hours
+	) {
+		task.require_active_hours = requireActiveHours;
+		changes.push(`require_active_hours → ${requireActiveHours}`);
+	}
+
 	if (changes.length === 0) return ok("変更はありません（既に同じ設定です）。");
 
 	saveHeartbeat(heartbeat);
@@ -150,6 +172,12 @@ const createTaskHandler: ToolHandler = async (args) => {
 	if (BUILTIN_TASK_IDS.has(taskId)) {
 		return fail(
 			`"${taskId}" はビルトインタスクの ID です。別の ID を使ってください`,
+		);
+	}
+
+	if (description.length > MAX_DESCRIPTION_LENGTH) {
+		return fail(
+			`description は ${MAX_DESCRIPTION_LENGTH} 文字以内にしてください`,
 		);
 	}
 
@@ -262,6 +290,11 @@ export const heartbeatTools: ToolDefinition[] = [
 							type: "string",
 							description:
 								"カスタムタスクの実行プロンプトを変更する（ビルトインタスクでは変更不可）",
+						},
+						require_active_hours: {
+							type: "boolean",
+							description:
+								"アクティブ時間帯のみ実行するか（false で24時間実行可）",
 						},
 					},
 					required: ["task_id"],

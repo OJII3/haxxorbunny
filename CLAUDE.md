@@ -203,7 +203,7 @@ scripts/
 | ツール名 | パラメータ | 説明 |
 |---------|-----------|------|
 | `list_tasks` | (なし) | 全定期タスク（ビルトイン＋カスタム）の一覧を確認する |
-| `update_task` | `task_id`, `enabled?`, `interval_minutes?`, `description?`, `prompt?` | 定期タスクの設定を変更する。ビルトインタスクの prompt は変更不可 |
+| `update_task` | `task_id`, `enabled?`, `interval_minutes?`, `description?`, `prompt?`, `require_active_hours?` | 定期タスクの設定を変更する。ビルトインタスクの prompt は変更不可 |
 | `create_task` | `task_id`, `description`, `prompt`, `interval_minutes` | カスタム定期タスクを作成（最大5個、間隔60〜10080分、プロンプト500字以内） |
 | `delete_task` | `task_id` | カスタムタスクを削除する（ビルトインタスクは削除不可） |
 
@@ -303,7 +303,8 @@ VC参加リクエスト（メンション + キーワード）
 cron (13分) — 高頻度タスク（agentBusy のみチェック）
   ├─ autonomous_post (60分, disabled): アクティブ時間内のみ → 自由行動プロンプト → エージェントループ（95%+ do_nothing）
   ├─ channel_patrol (1440分=1日): 全チャンネルスキャン → bot不在24時間超 かつ 直近人間メッセージ7日以内のチャンネル → patrolReflect（観察モード: 上位3チャンネル、テキスト発言なし、リアクション+記憶+personality更新のみ）
-  └─ goal_check (720分=12時間): アクティブゴールあれば → 内部確認のみ（発言は基本しない）
+  ├─ goal_check (720分=12時間): アクティブゴールあれば → 内部確認のみ（発言は基本しない）
+  └─ custom tasks (各タスクの interval): type=custom のタスクを shouldRunTask → require_active_hours チェック → agentBusy チェック → 全ギルドで selectChannel → customTaskContext 付きエージェントループ実行
 
 cron (2時間) — 低頻度タスク
   ├─ distill_memory (12時間): 蒸留LLM(flash) → 日次記憶集約 + 長期記憶更新 + グローバル記憶昇格 + trimGlobalMemory
