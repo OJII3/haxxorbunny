@@ -31,6 +31,9 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 # OS
 .DS_Store
 
+# Claude Code
+.claude/settings.local.json
+
 # direnv
 .direnv
 
