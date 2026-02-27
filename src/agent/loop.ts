@@ -491,6 +491,24 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 
 迷ったら do_nothing です。99% の場合は do_nothing が正解です。`,
 		});
+	} else if (ctx.customTaskContext) {
+		// カスタムタスクトリガー
+		const dbMessages = getRecentMessages(ctx.channel.id, 10);
+		if (dbMessages.length > 0) {
+			messages.push({
+				role: "user",
+				content: `## 直近の会話\n${formatDbMessages(dbMessages)}`,
+			});
+		}
+		messages.push({
+			role: "user",
+			content: `定期タスク「${ctx.customTaskContext.taskDescription}」(${ctx.customTaskContext.taskId}) の実行時間です。
+
+${ctx.customTaskContext.taskPrompt}
+
+【重要】必要なアクションがなければ do_nothing を呼んでください。
+義務感で何かを投稿する必要はありません。タスクの目的に沿った行動のみ行ってください。`,
+		});
 	} else if (ctx.goalContext) {
 		// ゴールチェックトリガー
 		const dbMessages = getRecentMessages(ctx.channel.id, 5);

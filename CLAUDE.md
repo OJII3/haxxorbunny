@@ -57,7 +57,7 @@ src/
 │       ├── discord.ts    # Discord 操作ツール群
 │       ├── memory.ts     # 記憶・人格更新ツール群
 │       ├── goals.ts      # ゴール管理ツール群
-│       ├── heartbeat.ts  # スケジュール管理ツール群 (独り言の頻度調整)
+│       ├── heartbeat.ts  # 定期タスク管理ツール群 (list/update/create/delete)
 │       ├── home-channels.ts # ホームチャンネル管理ツール群 (list/add/remove)
 │       ├── channel-policy.ts # チャンネルポリシー管理ツール群 (set/get/remove + LLMパーシング)
 │       ├── avatar.ts     # プロフィール画像管理ツール群
@@ -110,7 +110,7 @@ src/
     ├── migrate.ts        # テーブル作成
     └── queries.ts        # クエリヘルパー
 data/
-├── heartbeat.json        # HEARTBEAT: グローバル定期タスク設定
+├── heartbeat.json        # HEARTBEAT: グローバル定期タスク設定 (type: builtin/custom, prompt, require_active_hours)
 ├── personality.json      # PERSONALITY: グローバル人格設定 (bot が自己更新可能、全ギルド共有)
 ├── global-memory.json    # GLOBAL MEMORY: 全サーバー共通の記憶 (一般知識・夢の洞察)
 ├── memory.json           # レガシー (同上)
@@ -198,12 +198,14 @@ scripts/
 | `voice_reply` | `content` | ボイスチャンネルで音声として返答（TTS再生、50文字以内推奨） |
 | `leave_voice` | (なし) | ボイスチャンネルから退出する |
 
-**スケジュール管理ツール:**
+**定期タスク管理ツール:**
 
 | ツール名 | パラメータ | 説明 |
 |---------|-----------|------|
-| `get_posting_schedule` | (なし) | 独り言の現在の設定（enabled, interval_minutes）を返す |
-| `update_posting_schedule` | `enabled?`, `interval_minutes?` | 独り言の頻度を変更。interval は 1440〜10080 分の範囲（1日〜1週間） |
+| `list_tasks` | (なし) | 全定期タスク（ビルトイン＋カスタム）の一覧を確認する |
+| `update_task` | `task_id`, `enabled?`, `interval_minutes?`, `description?`, `prompt?` | 定期タスクの設定を変更する。ビルトインタスクの prompt は変更不可 |
+| `create_task` | `task_id`, `description`, `prompt`, `interval_minutes` | カスタム定期タスクを作成（最大5個、間隔60〜10080分、プロンプト500字以内） |
+| `delete_task` | `task_id` | カスタムタスクを削除する（ビルトインタスクは削除不可） |
 
 **プロフィール画像ツール:**
 
@@ -319,6 +321,7 @@ cron (2時間) — 低頻度タスク
 | `triage-react` | `triageReactContext` | 会話履歴15件 + トリガーメッセージ + 「add_reaction / do_nothing」（MAX_ITER=3） |
 | `reaction` | `reactionContext` | リアクション情報 + 「反応する？」 |
 | `cron` + patrol | (patrolReflect) | 観察モード: patrolReflect() で会話観察 → personality/memory/reaction 更新（エージェントループ不使用） |
+| `cron` + `customTaskContext` | `customTaskContext` | カスタムタスクのプロンプト + 直近会話10件 |
 | `cron` + `goalContext` | `goalContext` | ゴール情報 + 「アクションを取りたい？」 |
 | `cron` (デフォルト) | なし | 自由行動プロンプト（ゴール情報 + ツール案内） |
 | `voice` | `voiceContext` | トランスクリプト履歴 + 「voice_reply で返答」（MAX_ITER=3, temp=0.6） |
@@ -346,7 +349,7 @@ cron (2時間) — 低頻度タスク
 - **ホームチャンネル**: bot が積極的に会話に参加するチャンネルを `list_home_channels` / `add_home_channel` / `remove_home_channel` ツールで管理。ホームチャンネル未設定時は全チャンネルがホーム扱い（後方互換）。設定は `data/guilds/{guildId}/home-channels.json` に保存。ユーザーが「ここで話していいよ」「このチャンネルにもいて」等の暗黙的な参加歓迎ニュアンスを示した場合にも自律的にホームチャンネルを追加する（「ホーム」というワード不要）。逆に拒否ニュアンスの場合は削除を検討する
 - **チャンネル別トリアージポリシー**: bot が `set_channel_policy` / `get_channel_policy` / `remove_channel_policy` ツールでチャンネルごとの反応方針を自律的に管理。自然言語の説明を triageLlm が構造化パラメータ（avg_offset, allow_react, custom_instructions）に変換して保存。カスタムポリシー未設定の非ホームチャンネルにはデフォルトの保守的ポリシー（avg_offset: -0.3, allow_react: false）が適用される。メンション時はポリシーをバイパス
 - **メンション記憶強化**: メンション（直接の呼びかけ）による指示・依頼は忘れにくくする。AgentContext に `isMentioned` を伝播し、①システムプロンプトで save_memory を促す、②emotional_impact の最低値を 3 にフロアリング。30日後のスコアが impact=2 の ~0.425 → impact=3 の ~0.500 以上に改善
-- **自律的スケジュール調整**: bot が `get_posting_schedule` / `update_posting_schedule` ツールで独り言（autonomous_post）の頻度を自分で調整可能。気分や状況に応じて有効/無効の切り替えや間隔（1440〜10080分 = 1日〜1週間）の変更ができる
+- **自律的タスク管理**: bot が `list_tasks` / `update_task` / `create_task` / `delete_task` ツールで全定期タスクを自律的に管理可能。ビルトインタスク（autonomous_post, channel_patrol, goal_check, distill_memory, cleanup_old_memory, dream_processing）の有効/無効・間隔を変更でき、さらにカスタム定期タスク（最大5個）を自由に作成・編集・削除できる。カスタムタスクは指定したプロンプトに従ってエージェントループを定期実行する。HeartbeatTask に `type`（builtin/custom）、`prompt`（カスタムタスクの実行プロンプト）、`require_active_hours`（アクティブ時間帯限定、デフォルトtrue）フィールドを追加
 - **自律的プロフィール画像変更**: bot が `list_avatars` / `change_avatar` / `get_avatar_status` ツールでプロフィール画像を自律的に変更可能。30分のクールダウンで頻繁な変更を防止。変更履歴（直近20件）を記録。画像は `data/avatars/` に配置し `manifest.json` で管理
 - **LLM ストリーミング応答**: エージェントループの LLM 呼び出しは `stream: true` + `max_tokens: 2048` で動作。チャンクから content と tool_calls を index ベースで蓄積・組み立て。ストリームエラー・空レスポンス・max_tokens 途中切れのガード付き
 - **連結 JSON 展開**: LLM が tool_call の arguments に複数の JSON オブジェクトを連結して返すケース（`{...}{...}`）に対応。`parseAllJsonObjects` が全オブジェクトを抽出し、`inferToolNameFromArgs` が各オブジェクトの引数キーからツール定義をスコアリングしてツール名を推定。エージェントループで個別の tool_call として展開・実行する。`parseToolArguments` は安全弁として先頭オブジェクトのみ返すフォールバックを維持

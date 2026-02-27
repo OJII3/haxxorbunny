@@ -19,6 +19,16 @@ export interface ReactionContext {
 	messageContent: string;
 }
 
+/** カスタムタスクコンテキスト */
+export interface CustomTaskContext {
+	/** タスク ID */
+	taskId: string;
+	/** タスクの説明 */
+	taskDescription: string;
+	/** タスク実行プロンプト */
+	taskPrompt: string;
+}
+
 /** ゴールチェックコンテキスト */
 export interface GoalContext {
 	/** アクティブなゴールの要約 */
@@ -59,6 +69,8 @@ export interface AgentContext {
 	patrolContext?: PatrolContext;
 	/** リアクションコンテキスト */
 	reactionContext?: ReactionContext;
+	/** カスタムタスクコンテキスト */
+	customTaskContext?: CustomTaskContext;
 	/** ゴールチェックコンテキスト */
 	goalContext?: GoalContext;
 	/** ボイスチャットコンテキスト */
