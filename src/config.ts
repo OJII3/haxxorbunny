@@ -50,7 +50,8 @@ export const config = {
 		model: process.env.THINKING_MODEL ?? "gemini-3-pro-preview",
 	},
 	voice: {
-		whisperUrl: process.env.WHISPER_URL ?? "http://localhost:8090",
+		sttUrl:
+			process.env.STT_URL ?? process.env.WHISPER_URL ?? "http://localhost:8090",
 		voicevoxUrl: process.env.VOICEVOX_URL ?? "http://localhost:50021",
 		voicevoxSpeaker: Number(process.env.VOICEVOX_SPEAKER ?? "1"),
 		silenceTimeoutMs: Number(process.env.VOICE_SILENCE_TIMEOUT_MS ?? "300000"),

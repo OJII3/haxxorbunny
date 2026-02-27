@@ -11,7 +11,7 @@ Main branch: `main`
 - Discord: discord.js v14
 - LLM: OpenAI SDK → Gemini API (OpenAI 互換エンドポイント直接呼び出し)
 - Voice: @discordjs/voice + opusscript (純JS Opus)
-- STT: whisper.cpp サーバー (Docker)
+- STT: Moonshine ASR サーバー (UsefulSensors/moonshine-tiny-ja, Docker)
 - TTS: VOICEVOX Engine (Docker)
 - DB: SQLite (bun:sqlite + Drizzle ORM)
 - Linter/Formatter: Biome
@@ -37,6 +37,10 @@ Main branch: `main`
 ├── flake.nix             # Nix Flake 開発環境定義
 ├── package.json          # 依存関係 + npm scripts
 ├── tsconfig.json         # TypeScript コンパイラ設定
+moonshine/
+├── server.py             # Moonshine ASR FastAPI サーバー (/inference 互換エンドポイント)
+├── requirements.txt      # Python 依存関係
+└── Containerfile         # コンテナイメージビルド定義
 searxng/
 └── settings.yml          # SearXNG 検索エンジン設定（JSON フォーマット有効化等）
 src/
@@ -66,7 +70,7 @@ src/
 ├── voice/
 │   ├── constants.ts      # サンプルレート、VAD パラメータ等の定数
 │   ├── audio-utils.ts    # PCM↔WAV 変換、RMS 音量計算
-│   ├── stt.ts            # whisper.cpp HTTP クライアント (STT)
+│   ├── stt.ts            # Moonshine ASR HTTP クライアント (STT)
 │   ├── tts.ts            # VOICEVOX HTTP クライアント (TTS)
 │   ├── receiver.ts       # 音声受信 + VAD (Voice Activity Detection)
 │   ├── session.ts        # VoiceSession (VC接続、STT→Agent→TTS パイプライン)
@@ -284,7 +288,7 @@ scripts/
 
 VC参加リクエスト（メンション + キーワード）
   → メンバーがVC在室？ → voiceManager.startSession() → VC参加
-    → 音声受信ループ: Opus → PCM → VAD → 無音600ms → STT(whisper.cpp)
+    → 音声受信ループ: Opus → PCM → VAD → 無音600ms → STT(Moonshine ASR)
       → エージェントループ(voice モード, MAX_ITER=3, temp=0.6)
         → voice_reply → TTS(VOICEVOX) → WAV → AudioPlayer → Discord
     → 自動退出: 無音5分 / 最大10分 / 全員退出
@@ -401,7 +405,7 @@ memory.json / goals.json はギルド（Discord サーバー）ごとに `data/g
 - `.env` ファイルがプロジェクトルートに存在（`.env.example` を参照して作成）
 - Google AI Studio の API キー（`GEMINI_API_KEY`）を `.env` に設定
 - Discord Developer Portal で `GuildMembers` Privileged Intent を有効化
-- ボイスチャット使用時: VOICEVOX Engine と whisper.cpp サーバーが起動済み（compose.yaml で自動起動）
+- ボイスチャット使用時: VOICEVOX Engine と Moonshine ASR サーバーが起動済み（compose.yaml で自動起動）
 
 ### デプロイコマンド
 
@@ -429,7 +433,7 @@ podman-compose ps
 | bot | haxxorbunny | Discord bot 本体 (Bun) |
 | searxng | haxxorbunny-searxng | Web検索エンジン (SearXNG) |
 | voicevox | haxxorbunny-voicevox | TTS Engine (VOICEVOX, CPU) |
-| whisper | haxxorbunny-whisper | STT Server (whisper.cpp, small model) |
+| moonshine | haxxorbunny-moonshine | STT Server (Moonshine ASR, moonshine-tiny-ja) |
 
 ### データ永続化
 
