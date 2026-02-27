@@ -66,7 +66,8 @@ src/
 │       ├── logs.ts       # ログ参照ツール群 (view_messages, view_my_actions)
 │       └── thinking.ts   # AI質問ツール群 (ai_ask)
 ├── utils/
-│   └── time.ts           # JST タイムスタンプフォーマットヘルパー (formatJSTShort, formatJSTFull)
+│   ├── time.ts           # JST タイムスタンプフォーマットヘルパー (formatJSTShort, formatJSTFull)
+│   └── permissions.ts    # チャンネル権限チェックヘルパー (hasChannelPerms)
 ├── voice/
 │   ├── constants.ts      # サンプルレート、VAD パラメータ等の定数
 │   ├── audio-utils.ts    # PCM↔WAV 変換、RMS 音量計算

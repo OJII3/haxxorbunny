@@ -15,6 +15,7 @@ import {
 	markChannelResponded,
 	unlockChannel,
 } from "../llm/triage-throttle.ts";
+import { canSendTyping } from "../utils/permissions.ts";
 import { formatJSTFull, formatJSTShort } from "../utils/time.ts";
 import {
 	getToolHandler,
@@ -30,6 +31,10 @@ const TEXT_ONLY_RETRY_MAX_LENGTH = 1000;
 /**
  * text-only response リトライ時のプロンプトを組み立てる。
  * assistantContent は string | null（LLM の assembledContent）。
+ *
+ * tool_choice: "required" を指定しても LLM がツール呼び出しなしの
+ * テキスト応答を返すケース（Gemini API 互換エンドポイント等）への
+ * フォールバック処理として使用される。
  */
 export function buildTextOnlyRetryPrompt(
 	assistantContent: string | null,
@@ -293,15 +298,18 @@ async function _runAgentLoopInner(ctx: AgentContext): Promise<void> {
 	// typing インジケーター: LLM 応答中にユーザーへ「入力中…」を表示
 	// triage-react モードではリアクションのみの可能性が高いため typing を抑制
 	const skipTyping = ctx.triggeredBy === "triage-react";
+	const botId = ctx.guild.members.me?.id;
+	const canType =
+		!skipTyping && !!botId && canSendTyping(ctx.channel, botId, ctx.guild);
 	const sendTypingSafe = () => {
-		if ("sendTyping" in ctx.channel) {
+		if (canType) {
 			(ctx.channel as { sendTyping: () => Promise<void> })
 				.sendTyping()
 				.catch((e) => console.warn("[agent] sendTyping failed:", e));
 		}
 	};
-	if (!skipTyping) sendTypingSafe();
-	const typingInterval = skipTyping ? null : setInterval(sendTypingSafe, 5_000);
+	if (canType) sendTypingSafe();
+	const typingInterval = canType ? setInterval(sendTypingSafe, 5_000) : null;
 
 	try {
 		return await _runAgentLoopBody(ctx);
@@ -578,6 +586,7 @@ ${ctx.customTaskContext.taskPrompt}
 				typeof llm.chat.completions.create
 			>[0]["messages"],
 			tools: activeToolSpecs,
+			tool_choice: "required",
 			temperature,
 			max_tokens: 2048,
 			stream: true,
