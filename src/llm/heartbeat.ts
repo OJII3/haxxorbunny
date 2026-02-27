@@ -7,6 +7,12 @@ export interface HeartbeatTask {
 	interval_minutes: number;
 	last_executed?: string;
 	enabled: boolean;
+	/** タスク種別: builtin=コード実装あり, custom=プロンプトで実行 */
+	type: "builtin" | "custom";
+	/** カスタムタスクの実行プロンプト */
+	prompt?: string;
+	/** アクティブ時間帯限定か（デフォルト: true） */
+	require_active_hours?: boolean;
 }
 
 export interface ActiveHours {
@@ -47,7 +53,14 @@ const HEARTBEAT_PATH = join(import.meta.dir, "../../data/heartbeat.json");
 export function loadHeartbeat(): Heartbeat {
 	try {
 		const raw = readFileSync(HEARTBEAT_PATH, "utf-8");
-		return JSON.parse(raw) as Heartbeat;
+		const heartbeat = JSON.parse(raw) as Heartbeat;
+		// フォールバック: type 未設定タスクに "builtin" を自動補完（ファイルには書き戻さず毎回適用）
+		for (const task of heartbeat.tasks) {
+			if (!task.type) {
+				task.type = "builtin";
+			}
+		}
+		return heartbeat;
 	} catch {
 		const defaultHeartbeat: Heartbeat = {
 			tasks: [],

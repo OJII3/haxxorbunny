@@ -6,12 +6,13 @@ import {
 	type TextChannel,
 } from "discord.js";
 import { isAgentBusyForGuild, runAgentLoop } from "../agent/loop.ts";
-import type { AgentContext } from "../agent/types.ts";
+import type { AgentContext, CustomTaskContext } from "../agent/types.ts";
 import { client } from "../client.ts";
 import { guildDailyMemoryDir } from "../data/paths.ts";
 import { getActiveChannelIds } from "../db/queries.ts";
 import { distillDailyMemory } from "../llm/distill.ts";
 import { processDream } from "../llm/dream.ts";
+import type { HeartbeatTask } from "../llm/heartbeat.ts";
 import {
 	isWithinActiveHours,
 	loadHeartbeat,
@@ -167,6 +168,76 @@ async function runFrequentTasks(): Promise<void> {
 		} catch (error) {
 			console.error(`[frequent] Error in task ${task.id}:`, error);
 		}
+	}
+
+	// カスタムタスク実行
+	for (const task of heartbeat.tasks) {
+		if (task.type !== "custom") continue;
+		if (!shouldRunTask(task)) continue;
+
+		console.log(`[frequent] Running custom task: ${task.id}`);
+
+		if (
+			task.require_active_hours !== false &&
+			!isWithinActiveHours(heartbeat)
+		) {
+			console.log(
+				`[frequent] custom task ${task.id} skipped: outside active hours`,
+			);
+			continue;
+		}
+
+		try {
+			await runCustomTask(task);
+			// エージェントループ中に heartbeat.json が変更される可能性があるため再ロード
+			const freshHeartbeat = loadHeartbeat();
+			markTaskExecuted(freshHeartbeat, task.id);
+			console.log(`[frequent] Completed custom task: ${task.id}`);
+		} catch (error) {
+			console.error(`[frequent] Error in custom task ${task.id}:`, error);
+		}
+	}
+}
+
+async function runCustomTask(task: HeartbeatTask): Promise<void> {
+	if (!task.prompt) {
+		console.warn(`[cron] Custom task ${task.id} has no prompt, skipping`);
+		return;
+	}
+
+	for (const guild of client.guilds.cache.values()) {
+		if (isAgentBusyForGuild(guild.id)) {
+			console.log(
+				`[cron] custom task ${task.id} skipped for ${guild.name}: agent busy`,
+			);
+			continue;
+		}
+
+		const channel = selectChannel(guild);
+		if (!channel) {
+			console.log(
+				`[cron] custom task ${task.id}: ${guild.name}: テキストチャンネルが見つかりません、スキップ`,
+			);
+			continue;
+		}
+
+		const customTaskContext: CustomTaskContext = {
+			taskId: task.id,
+			taskDescription: task.description,
+			taskPrompt: task.prompt,
+		};
+
+		const agentCtx: AgentContext = {
+			channel,
+			guild,
+			triggeredBy: "cron",
+			customTaskContext,
+		};
+
+		await runAgentLoop(agentCtx);
+		console.log(
+			`[cron] custom task ${task.id}: ${guild.name}/#${channel.name} | agent loop completed`,
+		);
 	}
 }
 
