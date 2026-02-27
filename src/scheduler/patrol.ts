@@ -7,6 +7,7 @@ import {
 import { client } from "../client.ts";
 import { getRecentMessages, saveBotAction } from "../db/queries.ts";
 import { patrolReflect } from "../llm/reflection.ts";
+import { hasChannelPerms } from "../utils/permissions.ts";
 import { formatJSTShort } from "../utils/time.ts";
 
 /** bot 最終発言から N 分以上経過したチャンネルのみ巡回対象 */
@@ -41,10 +42,13 @@ async function scanChannelsForGuild(guild: Guild): Promise<PatrolCandidate[]> {
 		const textChannel = ch as TextChannel;
 
 		// bot にアクセス権がないチャンネルはスキップ
-		const perms = textChannel.permissionsFor(botId);
 		if (
-			!perms?.has(PermissionFlagsBits.ViewChannel) ||
-			!perms?.has(PermissionFlagsBits.ReadMessageHistory)
+			!hasChannelPerms(
+				textChannel,
+				botId,
+				PermissionFlagsBits.ViewChannel,
+				PermissionFlagsBits.ReadMessageHistory,
+			)
 		) {
 			continue;
 		}
@@ -135,13 +139,14 @@ export async function patrolChannels(): Promise<void> {
 			);
 
 			// リアクションの適用（最大2件、AddReactions 権限がある場合のみ）
-			const botId = client.user?.id;
-			const reactionPerms = botId ? target.channel.permissionsFor(botId) : null;
-			if (
-				result?.reactions &&
-				result.reactions.length > 0 &&
-				reactionPerms?.has(PermissionFlagsBits.AddReactions)
-			) {
+			const canReact =
+				client.user?.id &&
+				hasChannelPerms(
+					target.channel,
+					client.user.id,
+					PermissionFlagsBits.AddReactions,
+				);
+			if (result?.reactions && result.reactions.length > 0 && canReact) {
 				try {
 					const discordMessages = await target.channel.messages.fetch({
 						limit: 15,

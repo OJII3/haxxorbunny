@@ -19,14 +19,7 @@ import {
 	shouldRunTask,
 } from "../llm/heartbeat.ts";
 import { trimGlobalMemory } from "../llm/memory.ts";
-
-function hasRequiredPerms(ch: TextChannel, botId: string): boolean {
-	const perms = ch.permissionsFor(botId);
-	return (
-		perms?.has(PermissionFlagsBits.ViewChannel) === true &&
-		perms?.has(PermissionFlagsBits.SendMessages) === true
-	);
-}
+import { hasChannelPerms } from "../utils/permissions.ts";
 
 function selectChannel(guild: Guild): TextChannel | undefined {
 	const botId = guild.client.user?.id;
@@ -36,7 +29,12 @@ function selectChannel(guild: Guild): TextChannel | undefined {
 		const ch = guild.channels.cache.get(id);
 		if (
 			ch?.type === ChannelType.GuildText &&
-			hasRequiredPerms(ch as TextChannel, botId)
+			hasChannelPerms(
+				ch as TextChannel,
+				botId,
+				PermissionFlagsBits.ViewChannel,
+				PermissionFlagsBits.SendMessages,
+			)
 		) {
 			return ch as TextChannel;
 		}
@@ -44,7 +42,12 @@ function selectChannel(guild: Guild): TextChannel | undefined {
 	return guild.channels.cache.find(
 		(ch) =>
 			ch.type === ChannelType.GuildText &&
-			hasRequiredPerms(ch as TextChannel, botId),
+			hasChannelPerms(
+				ch as TextChannel,
+				botId,
+				PermissionFlagsBits.ViewChannel,
+				PermissionFlagsBits.SendMessages,
+			),
 	) as TextChannel | undefined;
 }
 
