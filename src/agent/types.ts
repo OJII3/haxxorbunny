@@ -35,6 +35,14 @@ export interface VoiceContext {
 	recentTranscripts: { displayName: string; text: string; timestamp: number }[];
 }
 
+/** トリアージ react 判定コンテキスト */
+export interface TriageReactContext {
+	/** トリアージ LLM の判定理由 */
+	reasoning: string;
+	/** トリアージ LLM の確信度 */
+	confidence: number;
+}
+
 /** エージェントループに渡すコンテキスト */
 export interface AgentContext {
 	/** トリガーとなったメッセージ（cron 経由の場合は undefined） */
@@ -44,7 +52,7 @@ export interface AgentContext {
 	/** 対象 Guild */
 	guild: Guild;
 	/** 起動トリガーの種別 */
-	triggeredBy: "triage" | "cron" | "reaction" | "voice";
+	triggeredBy: "triage" | "triage-react" | "cron" | "reaction" | "voice";
 	/** メンション（@bot 等）による起動かどうか */
 	isMentioned?: boolean;
 	/** チャンネル巡回コンテキスト */
@@ -55,6 +63,8 @@ export interface AgentContext {
 	goalContext?: GoalContext;
 	/** ボイスチャットコンテキスト */
 	voiceContext?: VoiceContext;
+	/** トリアージ react コンテキスト */
+	triageReactContext?: TriageReactContext;
 }
 
 /** ツール実行結果 */

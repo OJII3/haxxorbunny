@@ -9,7 +9,7 @@ import {
 	loadPersonality,
 	personalityToPrompt,
 } from "../llm/prompts/personality.ts";
-import { SURFACE_PROMPT } from "../llm/prompts/system.ts";
+import { SYSTEM_PROMPT } from "../llm/prompts/system.ts";
 import {
 	lockChannel,
 	markChannelResponded,
@@ -262,6 +262,8 @@ export async function runAgentLoop(ctx: AgentContext): Promise<void> {
 
 async function _runAgentLoopInner(ctx: AgentContext): Promise<void> {
 	// typing インジケーター: LLM 応答中にユーザーへ「入力中…」を表示
+	// triage-react モードではリアクションのみの可能性が高いため typing を抑制
+	const skipTyping = ctx.triggeredBy === "triage-react";
 	const sendTypingSafe = () => {
 		if ("sendTyping" in ctx.channel) {
 			(ctx.channel as { sendTyping: () => Promise<void> })
@@ -269,13 +271,13 @@ async function _runAgentLoopInner(ctx: AgentContext): Promise<void> {
 				.catch((e) => console.warn("[agent] sendTyping failed:", e));
 		}
 	};
-	sendTypingSafe();
-	const typingInterval = setInterval(sendTypingSafe, 5_000);
+	if (!skipTyping) sendTypingSafe();
+	const typingInterval = skipTyping ? null : setInterval(sendTypingSafe, 5_000);
 
 	try {
 		return await _runAgentLoopBody(ctx);
 	} finally {
-		clearInterval(typingInterval);
+		if (typingInterval) clearInterval(typingInterval);
 	}
 }
 
@@ -287,8 +289,8 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 	const globalMemory = loadGlobalMemory();
 	const memoryPrompt = memoryToPrompt(memory, globalMemory);
 
-	// 軽量構成: SURFACE → personality → memory (詳細は recall_identity ツールで参照)
-	const systemPrompt = `${SURFACE_PROMPT}\n\n${personalityPrompt}\n${memoryPrompt}`;
+	// 統合 SYSTEM_PROMPT + personality + memory
+	const systemPrompt = `${SYSTEM_PROMPT}\n\n${personalityPrompt}\n${memoryPrompt}`;
 
 	// 会話履歴を構築
 	const messages: Array<{
@@ -346,6 +348,45 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 				content: `## 直近の会話（音声）\n${transcriptHistory}`,
 			});
 		}
+	} else if (
+		ctx.triggerMessage &&
+		ctx.triggeredBy === "triage-react" &&
+		ctx.triageReactContext
+	) {
+		// triage-react トリガー: 会話を読んでリアクションするか判断する
+		const recentMessages = await ctx.triggerMessage.channel.messages.fetch({
+			limit: 15,
+		});
+		const triggerId = ctx.triggerMessage.id;
+		const history = buildConversationHistory(
+			[...recentMessages.values()].filter((m) => m.id !== triggerId).reverse(),
+		);
+		for (const msg of history) {
+			messages.push(msg);
+		}
+		const triggerTime = formatJSTShort(
+			new Date(ctx.triggerMessage.createdTimestamp),
+		);
+		const triggerText = `[${triggerTime} ${ctx.triggerMessage.author.displayName}]: ${ctx.triggerMessage.content}`;
+		const triggerImageParts = extractImageParts(ctx.triggerMessage);
+		messages.push({
+			role: "user",
+			content:
+				triggerImageParts.length > 0
+					? [{ type: "text" as const, text: triggerText }, ...triggerImageParts]
+					: triggerText,
+		});
+		messages.push({
+			role: "system",
+			content: `トリアージ判定で「何か感じた」と判定されました（理由: ${ctx.triageReactContext.reasoning}）。
+このメッセージに対してどう反応するか決めてください。
+
+- 何か感じたら add_reaction で絵文字リアクションを付ける（Unicode 絵文字1つ）
+- 印象的だったら save_memory で記憶に残す
+- 会話の内容から気分や興味が変わったら update_personality で更新する
+- 特に何も感じなければ do_nothing
+- メッセージ送信（send_message / reply_to_message）は基本不要。本当に返信したい時のみ`,
+		});
 	} else if (ctx.triggerMessage && ctx.triggeredBy === "triage") {
 		// メッセージトリガー: 直近の会話履歴 + トリガーメッセージ
 		const recentMessages = await ctx.triggerMessage.channel.messages.fetch({
@@ -469,8 +510,9 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 	let shouldStop = false;
 	let textOnlyRetries = 0;
 
-	// voice モード: イテレーション数とパラメータを調整
-	const maxIter = isVoiceMode ? 3 : MAX_ITERATIONS;
+	// voice / triage-react モード: イテレーション数とパラメータを調整
+	const isReactMode = ctx.triggeredBy === "triage-react";
+	const maxIter = isVoiceMode || isReactMode ? 3 : MAX_ITERATIONS;
 	const temperature = isVoiceMode ? 0.6 : 0.8;
 	const activeToolSpecs = isVoiceMode ? voiceToolSpecs : toolSpecs;
 

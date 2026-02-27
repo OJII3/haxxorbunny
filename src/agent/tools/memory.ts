@@ -9,7 +9,6 @@ import {
 	type Personality,
 	updatePersonality,
 } from "../../llm/prompts/personality.ts";
-import { IDENTITY_PROMPT, SOUL_PROMPT } from "../../llm/prompts/system.ts";
 import type { ToolDefinition, ToolHandler, ToolResult } from "../types.ts";
 
 function ok(result: string): ToolResult {
@@ -52,10 +51,6 @@ const saveUserNoteHandler: ToolHandler = async (args, ctx) => {
 	return ok(`User note saved for ${username}: ${note}`);
 };
 
-const recallIdentityHandler: ToolHandler = async () => {
-	return ok(`${SOUL_PROMPT}\n\n${IDENTITY_PROMPT}`);
-};
-
 const updatePersonalityHandler: ToolHandler = async (args, _ctx) => {
 	const partial: Partial<
 		Pick<Personality, "mood" | "recent_topics" | "interests">
@@ -89,21 +84,6 @@ const updatePersonalityHandler: ToolHandler = async (args, _ctx) => {
 };
 
 export const memoryTools: ToolDefinition[] = [
-	{
-		spec: {
-			type: "function",
-			function: {
-				name: "recall_identity",
-				description:
-					"自分の本質・行動指針・ツールの詳しい使い方を確認する。行動に迷ったときに呼ぶ",
-				parameters: {
-					type: "object",
-					properties: {},
-				},
-			},
-		},
-		handler: recallIdentityHandler,
-	},
 	{
 		spec: {
 			type: "function",

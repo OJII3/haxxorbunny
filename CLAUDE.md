@@ -97,7 +97,7 @@ src/
 │   ├── message-dedup.ts  # メッセージ重複抑制 (SHA-256 + 24時間キャッシュ)
 │   ├── avatar.ts         # アバター管理 (マニフェスト読み込み, ステート管理, クールダウン判定)
 │   └── prompts/
-│       ├── system.ts     # SURFACE_PROMPT (軽量要約) + SOUL_PROMPT (不変の本質) + IDENTITY_PROMPT (行動指針)
+│       ├── system.ts     # SYSTEM_PROMPT (統合プロンプト: 本質・ルール・行動指針・ツール説明)
 │       └── personality.ts # 可変プロンプト (4次元気分ベクトル + personality.json)
 ├── scheduler/
 │   ├── index.ts          # cron スケジューラー (13分 + 2時間 の2系統)
@@ -171,7 +171,6 @@ scripts/
 
 | ツール名 | パラメータ | 説明 |
 |---------|-----------|------|
-| `recall_identity` | (なし) | SOUL_PROMPT + IDENTITY_PROMPT の全文を参照（行動に迷った時に呼ぶ） |
 | `save_memory` | `entry`, `emotional_impact?`, `scope?` | 長期記憶に保存（30字以内、感情インパクト1-5、scope: guild/global） |
 | `save_user_note` | `username`, `note` | ユーザーメモ保存 |
 | `update_personality` | `mood?`, `recent_topics?`, `interests?` | 性格設定更新（mood は4次元ベクトル） |
@@ -251,8 +250,7 @@ scripts/
 {
   "action": "ignore" | "react" | "engage",
   "reasoning": "判定理由",
-  "confidence": 0.0〜1.0,
-  "emoji": "👍"  // action が "react" の場合のみ（Unicode 絵文字1つ）
+  "confidence": 0.0〜1.0
 }
 ```
 
@@ -280,12 +278,12 @@ scripts/
                                                            (** DB保存もトリアージも完全スキップ)
   トリアージ結果:
   ├─ ignore:  reflection LLM(flash, fire-and-forget) → personality + memory 更新
-  ├─ react:   トリガーメッセージに絵文字リアクション付与 → bot_actions ログ → reflection(fire-and-forget)
+  ├─ react:   エージェントループ起動 (triggeredBy: "triage-react", 会話履歴15件, MAX_ITER=3)
+  │            → add_reaction / save_memory / do_nothing 等のツールで自律的に反応
   └─ engage:  エージェントループ起動 (自動 typing インジケーター開始)
-       ├─ LLM に tools 定義 + SURFACE + personality + MEMORY + 会話履歴を送信 (軽量構成, stream:true, max_tokens:2048)
+       ├─ LLM に tools 定義 + SYSTEM_PROMPT + personality + MEMORY + 会話履歴を送信 (stream:true, max_tokens:2048)
        ├─ ストリーミングでチャンクを受信 → content + tool_calls を蓄積・組み立て
        ├─ tool_calls → 各ツール実行 → 結果を LLM に返す → ループ
-       ├─ LLM が必要時に recall_identity ツールで SOUL + IDENTITY の詳細を参照
        ├─ finish_reason=length → 途中切れガードで安全に終了
        └─ finish_reason=stop → 終了（最大5イテレーション）+ typing インジケーター停止
 
@@ -318,6 +316,7 @@ cron (2時間) — 低頻度タスク
 | トリガー | コンテキスト | プロンプト内容 |
 |---------|-------------|-------------|
 | `triage` | `triggerMessage` | 会話履歴 + トリガーメッセージ |
+| `triage-react` | `triageReactContext` | 会話履歴15件 + トリガーメッセージ + 「add_reaction / do_nothing」（MAX_ITER=3） |
 | `reaction` | `reactionContext` | リアクション情報 + 「反応する？」 |
 | `cron` + patrol | (patrolReflect) | 観察モード: patrolReflect() で会話観察 → personality/memory/reaction 更新（エージェントループ不使用） |
 | `cron` + `goalContext` | `goalContext` | ゴール情報 + 「アクションを取りたい？」 |
@@ -329,6 +328,7 @@ cron (2時間) — 低頻度タスク
 - メンション情報はトリアージのコンテキストとして渡され、判断材料として使われる
 - トリアージは mood 連動。sociability/curiosity が高いほど積極的に engage
 - ignore 時は reflection LLM が人格・記憶を更新（fire-and-forget）
+- react 時はエージェントループが起動（triage-react モード）し、LLM が add_reaction 等のツールで自律的に反応
 - engage 時はエージェントループが起動し、LLM がツールで自由に行動
 
 ### 人間らしさシステム
@@ -338,7 +338,7 @@ cron (2時間) — 低頻度タスク
 - **4次元気分ベクトル**: energy/positivity/sociability/curiosity (各0-1)。時間帯で energy 自動変動、急変防止の補間（70% new + 30% old）
 - **感情付き記憶**: MemoryEntry に emotional_impact (1-5) + created_at。エビングハウス忘却曲線（30日半減期）でスコアリング
 - **夢処理**: 24時間ごとにサーバー記憶+グローバル記憶を連想分析。洞察を [dream] タグ付きグローバル記憶として追加、不要なサーバー記憶を整理
-- **プロンプト階層化**: 軽量な SURFACE_PROMPT を毎回送信、詳細な SOUL_PROMPT + IDENTITY_PROMPT は recall_identity ツールでオンデマンド参照。トークン消費を ~1250t 削減
+- **統合 SYSTEM_PROMPT**: 本質・ルール・行動指針・ツール説明を1つの SYSTEM_PROMPT に統合し、毎回送信
 - **メッセージデバウンス**: 同一 channelId:userId の連続メッセージを3秒（`MESSAGE_BUFFER_MS`）蓄積。最大15秒（`MESSAGE_BUFFER_MAX_MS`）で強制フラッシュ。結合コンテンツとしてトリアージに渡す
 - **自動 typing インジケーター**: エージェントループ中は5秒間隔で sendTyping() を呼び、Discord 上に「入力中…」を表示
 - **ゴール駆動行動**: bot が自分で目標を設定し、cron で定期的に進捗確認・アクション実行
@@ -350,10 +350,10 @@ cron (2時間) — 低頻度タスク
 - **自律的プロフィール画像変更**: bot が `list_avatars` / `change_avatar` / `get_avatar_status` ツールでプロフィール画像を自律的に変更可能。30分のクールダウンで頻繁な変更を防止。変更履歴（直近20件）を記録。画像は `data/avatars/` に配置し `manifest.json` で管理
 - **LLM ストリーミング応答**: エージェントループの LLM 呼び出しは `stream: true` + `max_tokens: 2048` で動作。チャンクから content と tool_calls を index ベースで蓄積・組み立て。ストリームエラー・空レスポンス・max_tokens 途中切れのガード付き
 - **連結 JSON 展開**: LLM が tool_call の arguments に複数の JSON オブジェクトを連結して返すケース（`{...}{...}`）に対応。`parseAllJsonObjects` が全オブジェクトを抽出し、`inferToolNameFromArgs` が各オブジェクトの引数キーからツール定義をスコアリングしてツール名を推定。エージェントループで個別の tool_call として展開・実行する。`parseToolArguments` は安全弁として先頭オブジェクトのみ返すフォールバックを維持
-- **メンション禁止（多層防御）**: bot が他のユーザーを `<@userId>` 形式でメンションしないよう、プロンプト（SOUL/SURFACE/IDENTITY の3層）で指示 + コードレベルで `allowedMentions: { parse: [] }` を全メッセージ送信（send/reply/edit）に適用。LLM がプロンプトを無視した場合でも Discord API レベルでメンションが無効化される
+- **メンション禁止（多層防御）**: bot が他のユーザーを `<@userId>` 形式でメンションしないよう、プロンプト（SYSTEM_PROMPT）で指示 + コードレベルで `allowedMentions: { parse: [] }` を全メッセージ送信（send/reply/edit）に適用。LLM がプロンプトを無視した場合でも Discord API レベルでメンションが無効化される
 - **画像読み取り**: メッセージに添付された画像（png/jpeg/gif/webp）を OpenAI SDK の `content` 配列形式（`text` + `image_url` パーツ）で LLM に渡す。1メッセージ最大4枚、`detail: "low"` でトークン節約。DB には `[画像: filename]` としてテキスト追記。トリアージ LLM には画像を渡さず、テキストで画像がある旨を伝える
-- **AI/bot 自覚記憶フィルタ（多層防御）**: bot が「自分は AI/bot」という自己認識を記憶に保存しないよう、多層で防御。①プロンプト層（SOUL/SURFACE/IDENTITY + 蒸留/夢/リフレクション各プロンプト）で指示、②コード層（`memory-filter.ts` の `isAISelfAwareness` 関数）で `save_memory` ツール・`appendMemoryEntry`・`appendGlobalMemoryEntry`・`processMemoryFields` の全入口をフィルタリング。「AI の話題で盛り上がった」等の話題言及は許可し、主語が自分かつ述語が AI/bot のパターンのみブロック。ブロック時は silent に成功を返し LLM の再試行を防止。既存データの一括サニタイズは `bun run scripts/sanitize-memory.ts [--dry-run]`
-- **AIアシスタント的振る舞い禁止**: 「何かお手伝いできますか？」等のカスタマーサポート的対応をプロンプト（SURFACE/IDENTITY）で禁止。サービス提供者ではなく人間として会話する
+- **AI/bot 自覚記憶フィルタ（多層防御）**: bot が「自分は AI/bot」という自己認識を記憶に保存しないよう、多層で防御。①プロンプト層（SYSTEM_PROMPT + 蒸留/夢/リフレクション各プロンプト）で指示、②コード層（`memory-filter.ts` の `isAISelfAwareness` 関数）で `save_memory` ツール・`appendMemoryEntry`・`appendGlobalMemoryEntry`・`processMemoryFields` の全入口をフィルタリング。「AI の話題で盛り上がった」等の話題言及は許可し、主語が自分かつ述語が AI/bot のパターンのみブロック。ブロック時は silent に成功を返し LLM の再試行を防止。既存データの一括サニタイズは `bun run scripts/sanitize-memory.ts [--dry-run]`
+- **AIアシスタント的振る舞い禁止**: 「何かお手伝いできますか？」等のカスタマーサポート的対応をプロンプト（SYSTEM_PROMPT）で禁止。サービス提供者ではなく人間として会話する
 
 ### ギルドごとのデータ分離
 

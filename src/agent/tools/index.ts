@@ -41,7 +41,6 @@ const VOICE_ALLOWED_TOOLS = new Set([
 	"save_memory",
 	"save_user_note",
 	"update_personality",
-	"recall_identity",
 ]);
 
 /** voice モード用のフィルタ済みツール定義 */

@@ -14,7 +14,6 @@ export interface TriageResult {
 	action: "ignore" | "react" | "engage";
 	reasoning: string;
 	confidence: number;
-	emoji?: string;
 }
 
 /**
@@ -129,9 +128,7 @@ ${customSection}
 
 ## 応答フォーマット
 JSON のみを返すこと。それ以外のテキストは一切不要。reasoning は10字以内。
-- ignore/engage の場合: {"action":"ignore","reasoning":"理由","confidence":0.8}
-- react の場合: {"action":"react","reasoning":"理由","confidence":0.7,"emoji":"👍"}
-  - emoji は Unicode 絵文字1つを指定すること（カスタム絵文字は使えない）
+{"action":"ignore","reasoning":"理由","confidence":0.8}
 `.trim();
 }
 
@@ -267,18 +264,6 @@ export async function triage(
 			return {
 				action: "ignore",
 				reasoning: `react blocked by policy: ${parsed.reasoning}`,
-				confidence: parsed.confidence,
-			};
-		}
-
-		// react で emoji がない場合は ignore にフォールバック
-		if (parsed.action === "react" && !parsed.emoji) {
-			console.warn(
-				"[triage] react action without emoji, falling back to ignore",
-			);
-			return {
-				action: "ignore",
-				reasoning: parsed.reasoning,
 				confidence: parsed.confidence,
 			};
 		}
