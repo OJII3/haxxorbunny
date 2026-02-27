@@ -262,6 +262,8 @@ export async function runAgentLoop(ctx: AgentContext): Promise<void> {
 
 async function _runAgentLoopInner(ctx: AgentContext): Promise<void> {
 	// typing インジケーター: LLM 応答中にユーザーへ「入力中…」を表示
+	// triage-react モードではリアクションのみの可能性が高いため typing を抑制
+	const skipTyping = ctx.triggeredBy === "triage-react";
 	const sendTypingSafe = () => {
 		if ("sendTyping" in ctx.channel) {
 			(ctx.channel as { sendTyping: () => Promise<void> })
@@ -269,13 +271,13 @@ async function _runAgentLoopInner(ctx: AgentContext): Promise<void> {
 				.catch((e) => console.warn("[agent] sendTyping failed:", e));
 		}
 	};
-	sendTypingSafe();
-	const typingInterval = setInterval(sendTypingSafe, 5_000);
+	if (!skipTyping) sendTypingSafe();
+	const typingInterval = skipTyping ? null : setInterval(sendTypingSafe, 5_000);
 
 	try {
 		return await _runAgentLoopBody(ctx);
 	} finally {
-		clearInterval(typingInterval);
+		if (typingInterval) clearInterval(typingInterval);
 	}
 }
 
@@ -381,6 +383,7 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 
 - 何か感じたら add_reaction で絵文字リアクションを付ける（Unicode 絵文字1つ）
 - 印象的だったら save_memory で記憶に残す
+- 会話の内容から気分や興味が変わったら update_personality で更新する
 - 特に何も感じなければ do_nothing
 - メッセージ送信（send_message / reply_to_message）は基本不要。本当に返信したい時のみ`,
 		});
@@ -509,7 +512,7 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 
 	// voice / triage-react モード: イテレーション数とパラメータを調整
 	const isReactMode = ctx.triggeredBy === "triage-react";
-	const maxIter = isVoiceMode ? 3 : isReactMode ? 3 : MAX_ITERATIONS;
+	const maxIter = isVoiceMode || isReactMode ? 3 : MAX_ITERATIONS;
 	const temperature = isVoiceMode ? 0.6 : 0.8;
 	const activeToolSpecs = isVoiceMode ? voiceToolSpecs : toolSpecs;
 
