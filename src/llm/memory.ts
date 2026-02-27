@@ -36,6 +36,68 @@ const MAX_USER_NOTES = 10;
 const PROMPT_TOP_ENTRIES = 20;
 const GLOBAL_MAX_ENTRIES = 50;
 const GLOBAL_PROMPT_TOP_ENTRIES = 15;
+const DEDUP_PREFIX_LENGTH = 10;
+
+/**
+ * 重複チェック用にテキストを正規化する
+ * 句読点・スペース・記号を除去して比較しやすくする
+ */
+function normalizeTextForComparison(text: string): string {
+	return text
+		.replace(
+			/[\s\u3000.,、。!！?？…・:：;；（）()「」『』【】\-\u2014\u2015]/g,
+			"",
+		)
+		.toLowerCase();
+}
+
+/**
+ * 既存記憶リストから重複エントリを検索する
+ * - 完全一致（正規化後）
+ * - 一方が他方を含む（包含関係）
+ * - 先頭 DEDUP_PREFIX_LENGTH 文字が一致
+ *
+ * @returns 重複エントリのインデックス（見つからなければ -1）
+ */
+function findDuplicateIndex(
+	entries: (string | MemoryEntry)[],
+	newText: string,
+): number {
+	const normalizedNew = normalizeTextForComparison(newText);
+	if (normalizedNew.length === 0) return -1;
+
+	for (let i = 0; i < entries.length; i++) {
+		const existing = entries[i];
+		if (existing === undefined) continue;
+		const existingText =
+			typeof existing === "string" ? existing : existing.text;
+		const normalizedExisting = normalizeTextForComparison(existingText);
+		if (normalizedExisting.length === 0) continue;
+
+		// 完全一致
+		if (normalizedNew === normalizedExisting) return i;
+
+		// 包含関係: 一方が他方を含む
+		if (
+			normalizedNew.includes(normalizedExisting) ||
+			normalizedExisting.includes(normalizedNew)
+		) {
+			return i;
+		}
+
+		// 先頭 N 文字が一致（N 文字以上のテキスト同士のみ）
+		if (
+			normalizedNew.length >= DEDUP_PREFIX_LENGTH &&
+			normalizedExisting.length >= DEDUP_PREFIX_LENGTH &&
+			normalizedNew.slice(0, DEDUP_PREFIX_LENGTH) ===
+				normalizedExisting.slice(0, DEDUP_PREFIX_LENGTH)
+		) {
+			return i;
+		}
+	}
+
+	return -1;
+}
 
 // 簡易 mutex: ギルドごとにファイルの Read-Modify-Write を直列化する
 const memoryLocks = new Map<string, Promise<void>>();
@@ -147,9 +209,30 @@ export function appendGlobalMemoryEntry(
 	}
 	return withMemoryLock("__global__", () => {
 		const memory = loadGlobalMemory();
+		const clampedImpact = Math.max(1, Math.min(5, emotionalImpact));
+
+		// 重複チェック
+		const dupIndex = findDuplicateIndex(memory.entries, entry);
+		if (dupIndex !== -1) {
+			const existing = memory.entries[dupIndex] as MemoryEntry;
+			// 新しい impact が高ければ既存を更新
+			if (clampedImpact > existing.emotional_impact) {
+				existing.emotional_impact = clampedImpact;
+				saveGlobalMemory(memory);
+				console.log(
+					`[global-memory] Skipped duplicate (impact updated ${existing.emotional_impact}→${clampedImpact}): ${entry}`,
+				);
+			} else {
+				console.log(
+					`[global-memory] Skipped duplicate: ${entry} (existing: ${existing.text})`,
+				);
+			}
+			return;
+		}
+
 		const memoryEntry: MemoryEntry = {
 			text: entry,
-			emotional_impact: Math.max(1, Math.min(5, emotionalImpact)),
+			emotional_impact: clampedImpact,
 			created_at: new Date().toISOString(),
 		};
 		memory.entries.push(memoryEntry);
@@ -193,9 +276,34 @@ export function appendMemoryEntry(
 	}
 	return withMemoryLock(guildId, () => {
 		const memory = loadMemory(guildId);
+		const clampedImpact = Math.max(1, Math.min(5, emotionalImpact));
+
+		// 重複チェック
+		const dupIndex = findDuplicateIndex(memory.entries, entry);
+		if (dupIndex !== -1) {
+			const rawExisting = memory.entries[dupIndex] as string | MemoryEntry;
+			const existing = normalizeEntry(rawExisting);
+			// 新しい impact が高ければ既存を更新
+			if (clampedImpact > existing.emotional_impact) {
+				memory.entries[dupIndex] = {
+					...existing,
+					emotional_impact: clampedImpact,
+				};
+				saveMemory(guildId, memory);
+				console.log(
+					`[memory] Skipped duplicate (impact updated ${existing.emotional_impact}→${clampedImpact}): ${entry}`,
+				);
+			} else {
+				console.log(
+					`[memory] Skipped duplicate: ${entry} (existing: ${existing.text})`,
+				);
+			}
+			return;
+		}
+
 		const memoryEntry: MemoryEntry = {
 			text: entry,
-			emotional_impact: Math.max(1, Math.min(5, emotionalImpact)),
+			emotional_impact: clampedImpact,
 			created_at: new Date().toISOString(),
 		};
 		memory.entries.push(memoryEntry);
