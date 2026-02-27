@@ -717,7 +717,7 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 			);
 			const textContent =
 				typeof assistantMessage.content === "string"
-					? assistantMessage.content.trim()
+					? assistantMessage.content.trim().slice(0, 1000)
 					: "";
 			const retryInstruction = textContent
 				? "エラー: テキスト応答は無効です。あなたが返したテキストはユーザーには届いていません。\n" +
