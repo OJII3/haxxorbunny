@@ -36,13 +36,14 @@ const MAX_USER_NOTES = 10;
 const PROMPT_TOP_ENTRIES = 20;
 const GLOBAL_MAX_ENTRIES = 50;
 const GLOBAL_PROMPT_TOP_ENTRIES = 15;
-const DEDUP_PREFIX_LENGTH = 10;
+const DEDUP_PREFIX_LENGTH = 15;
+const DEDUP_MIN_CONTAINMENT_LENGTH = 5;
 
 /**
  * 重複チェック用にテキストを正規化する
  * 句読点・スペース・記号を除去して比較しやすくする
  */
-function normalizeTextForComparison(text: string): string {
+export function normalizeTextForComparison(text: string): string {
 	return text
 		.replace(
 			/[\s\u3000.,、。!！?？…・:：;；（）()「」『』【】\-\u2014\u2015]/g,
@@ -59,7 +60,7 @@ function normalizeTextForComparison(text: string): string {
  *
  * @returns 重複エントリのインデックス（見つからなければ -1）
  */
-function findDuplicateIndex(
+export function findDuplicateIndex(
 	entries: (string | MemoryEntry)[],
 	newText: string,
 ): number {
@@ -77,12 +78,15 @@ function findDuplicateIndex(
 		// 完全一致
 		if (normalizedNew === normalizedExisting) return i;
 
-		// 包含関係: 一方が他方を含む
-		if (
-			normalizedNew.includes(normalizedExisting) ||
-			normalizedExisting.includes(normalizedNew)
-		) {
-			return i;
+		// 包含関係: 一方が他方を含む（短い側が DEDUP_MIN_CONTAINMENT_LENGTH 文字以上の場合のみ）
+		const shorter = Math.min(normalizedNew.length, normalizedExisting.length);
+		if (shorter >= DEDUP_MIN_CONTAINMENT_LENGTH) {
+			if (
+				normalizedNew.includes(normalizedExisting) ||
+				normalizedExisting.includes(normalizedNew)
+			) {
+				return i;
+			}
 		}
 
 		// 先頭 N 文字が一致（N 文字以上のテキスト同士のみ）
