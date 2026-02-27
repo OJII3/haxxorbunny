@@ -6,6 +6,7 @@ import {
 } from "discord.js";
 import { client } from "../client.ts";
 import { getRecentMessages, saveBotAction } from "../db/queries.ts";
+import { shouldRespondToBots } from "../llm/channel-category.ts";
 import { patrolReflect } from "../llm/reflection.ts";
 import { hasChannelPerms } from "../utils/permissions.ts";
 import { formatJSTShort } from "../utils/time.ts";
@@ -57,12 +58,16 @@ async function scanChannelsForGuild(guild: Guild): Promise<PatrolCandidate[]> {
 			const recentMessages = await textChannel.messages.fetch({ limit: 5 });
 			if (recentMessages.size === 0) continue;
 
-			// 直近メッセージの中にbot以外の人間のメッセージがあるか
-			const humanMessages = recentMessages.filter((m) => !m.author.bot);
-			if (humanMessages.size === 0) continue;
+			// 直近メッセージの中に対象メッセージがあるか
+			// bot-chat カテゴリでは bot メッセージも巡回対象に含める
+			const isBotChat = shouldRespondToBots(guild.id, textChannel.id);
+			const targetMessages = isBotChat
+				? recentMessages.filter((m) => m.author.id !== client.user?.id)
+				: recentMessages.filter((m) => !m.author.bot);
+			if (targetMessages.size === 0) continue;
 
-			// 最新の人間メッセージが古すぎる場合はスキップ
-			const newestHumanMessage = humanMessages.first();
+			// 最新の対象メッセージが古すぎる場合はスキップ
+			const newestHumanMessage = targetMessages.first();
 			if (
 				newestHumanMessage &&
 				Date.now() - newestHumanMessage.createdTimestamp > PATROL_MAX_AGE_MS

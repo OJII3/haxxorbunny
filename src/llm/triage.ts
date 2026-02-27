@@ -2,11 +2,9 @@ import { config } from "../config.ts";
 import { getLastBotAction, getRecentMessages } from "../db/queries.ts";
 import { formatJSTFull, formatJSTShort } from "../utils/time.ts";
 import {
-	type ChannelPolicy,
-	DEFAULT_NON_HOME_POLICY,
-	getChannelPolicy,
-} from "./channel-policy.ts";
-import { isHomeChannel } from "./home-channels.ts";
+	type CategoryBehavior,
+	getChannelBehavior,
+} from "./channel-category.ts";
 import type { MoodState } from "./prompts/personality.ts";
 import { triageLlm } from "./triage-client.ts";
 
@@ -18,23 +16,18 @@ export interface TriageResult {
 
 /**
  * mood の sociability + curiosity の平均で3段階の方針を切り替える。
- * channelPolicy がある場合はそのオフセットを適用。
- * 非ホーム + ポリシー未設定の場合は DEFAULT_NON_HOME_POLICY のオフセットを適用。
+ * behavior が指定されている場合はそのオフセットを適用。
+ * behavior が未指定（メンション時）は mood のみで判定。
  */
 function buildTriageSystemPrompt(
 	mood?: MoodState,
-	options?: { isHome: boolean; channelPolicy?: ChannelPolicy | null },
+	behavior?: CategoryBehavior,
 ): string {
 	let avg = mood ? (mood.sociability + mood.curiosity) / 2 : 0.5;
 
-	if (options?.channelPolicy) {
-		// カスタムポリシーがある場合はそのオフセットを適用
-		avg = Math.max(0, Math.min(1, avg + options.channelPolicy.avg_offset));
-	} else if (options && !options.isHome) {
-		// 非ホーム + ポリシー未設定 → デフォルトの保守的オフセット
-		avg = Math.max(0, Math.min(1, avg + DEFAULT_NON_HOME_POLICY.avg_offset));
+	if (behavior) {
+		avg = Math.max(0, Math.min(1, avg + behavior.avg_offset));
 	}
-	// ホーム + ポリシー未設定 → avg そのまま
 
 	let policySection: string;
 
@@ -110,8 +103,8 @@ function buildTriageSystemPrompt(
 
 	// カスタム指示の注入
 	let customSection = "";
-	if (options?.channelPolicy?.custom_instructions) {
-		customSection = `\n\n## このチャンネル固有のルール\n${options.channelPolicy.custom_instructions}`;
+	if (behavior?.custom_instructions) {
+		customSection = `\n\n## このチャンネル固有のルール\n${behavior.custom_instructions}`;
 	}
 
 	return `
@@ -191,22 +184,13 @@ export async function triage(
 		isMentioned,
 	);
 
-	// ホームチャンネル判定（メンション時はペナルティなし）
-	let isHome = true;
-	if (options?.guildId) {
-		isHome = isMentioned ? true : isHomeChannel(options.guildId, channelId);
-	}
+	// カテゴリの振る舞い取得（メンション時はバイパス → behavior=undefined → mood のみ）
+	const behavior =
+		options?.guildId && !isMentioned
+			? getChannelBehavior(options.guildId, channelId)
+			: undefined;
 
-	// チャンネルポリシーの読み込み（メンション時はバイパス）
-	let channelPolicy: ChannelPolicy | null = null;
-	if (options?.guildId && !isMentioned) {
-		channelPolicy = getChannelPolicy(options.guildId, channelId);
-	}
-
-	const systemPrompt = buildTriageSystemPrompt(mood, {
-		isHome,
-		channelPolicy,
-	});
+	const systemPrompt = buildTriageSystemPrompt(mood, behavior);
 
 	try {
 		const response = await triageLlm.chat.completions.create({
@@ -252,12 +236,8 @@ export async function triage(
 
 		const parsed = JSON.parse(jsonMatch[0]) as TriageResult;
 
-		// ポリシーベースの react ブロック判定
-		const allowReact = channelPolicy
-			? channelPolicy.allow_react
-			: isHome
-				? true
-				: DEFAULT_NON_HOME_POLICY.allow_react;
+		// カテゴリベースの react ブロック判定
+		const allowReact = behavior ? behavior.allow_react : true; // メンション時（behavior=undefined）はリアクション許可
 
 		if (parsed.action === "react" && !allowReact) {
 			console.log("[triage] react blocked by policy, downgrading to ignore");

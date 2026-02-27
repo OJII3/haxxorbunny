@@ -10,6 +10,7 @@ import type { AgentContext, CustomTaskContext } from "../agent/types.ts";
 import { client } from "../client.ts";
 import { guildDailyMemoryDir } from "../data/paths.ts";
 import { getActiveChannelIds } from "../db/queries.ts";
+import { getChannelBehavior } from "../llm/channel-category.ts";
 import { distillDailyMemory } from "../llm/distill.ts";
 import { processDream } from "../llm/dream.ts";
 import type { HeartbeatTask } from "../llm/heartbeat.ts";
@@ -35,11 +36,13 @@ function selectChannel(guild: Guild): TextChannel | undefined {
 				botId,
 				PermissionFlagsBits.ViewChannel,
 				PermissionFlagsBits.SendMessages,
-			)
+			) &&
+			getChannelBehavior(guild.id, id).allow_unsolicited
 		) {
 			return ch as TextChannel;
 		}
 	}
+	// フォールバック: allow_unsolicited なチャンネルを探す
 	return guild.channels.cache.find(
 		(ch) =>
 			ch.type === ChannelType.GuildText &&
@@ -48,7 +51,8 @@ function selectChannel(guild: Guild): TextChannel | undefined {
 				botId,
 				PermissionFlagsBits.ViewChannel,
 				PermissionFlagsBits.SendMessages,
-			),
+			) &&
+			getChannelBehavior(guild.id, ch.id).allow_unsolicited,
 	) as TextChannel | undefined;
 }
 

@@ -1,11 +1,10 @@
 import type { ChatCompletionFunctionTool } from "openai/resources/chat/completions";
 import type { ToolDefinition, ToolHandler } from "../types.ts";
 import { avatarTools } from "./avatar.ts";
-import { channelPolicyTools } from "./channel-policy.ts";
+import { channelCategoryTools } from "./channel-category.ts";
 import { discordTools } from "./discord.ts";
 import { goalTools } from "./goals.ts";
 import { heartbeatTools } from "./heartbeat.ts";
-import { homeChannelTools } from "./home-channels.ts";
 import { logTools } from "./logs.ts";
 import { memoryTools } from "./memory.ts";
 import { thinkingTools } from "./thinking.ts";
@@ -22,8 +21,7 @@ const allTools: ToolDefinition[] = [
 	...avatarTools,
 	...logTools,
 	...thinkingTools,
-	...homeChannelTools,
-	...channelPolicyTools,
+	...channelCategoryTools,
 ];
 
 /** 通常モード（テキスト）で使用する tools 定義（voice ツールを除外） */

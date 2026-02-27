@@ -1,5 +1,6 @@
 import type { Message } from "discord.js";
 import type { ChatCompletionContentPart } from "openai/resources/chat/completions";
+import { client } from "../client.ts";
 import { config } from "../config.ts";
 import { getRecentMessages, saveBotAction } from "../db/queries.ts";
 import { llm } from "../llm/client.ts";
@@ -248,13 +249,16 @@ interface ConversationMessage {
 }
 
 function buildConversationHistory(messages: Message[]): ConversationMessage[] {
+	const botUserId = client.user?.id;
 	return messages.map((msg) => {
 		const time = formatJSTShort(new Date(msg.createdTimestamp));
 		const text = `[${time} ${msg.author.displayName}]: ${msg.content}`;
-		// assistant ロールに image_url パーツは非対応のため、bot メッセージでは画像を除外
-		const imageParts = msg.author.bot ? [] : extractImageParts(msg);
+		// 自分自身のメッセージのみ assistant、他は全て user（他 bot 含む）
+		const isSelf = botUserId !== undefined && msg.author.id === botUserId;
+		// assistant ロールに image_url パーツは非対応のため、自分のメッセージでは画像を除外
+		const imageParts = isSelf ? [] : extractImageParts(msg);
 		return {
-			role: (msg.author.bot ? "assistant" : "user") as "user" | "assistant",
+			role: (isSelf ? "assistant" : "user") as "user" | "assistant",
 			content:
 				imageParts.length > 0
 					? [{ type: "text" as const, text }, ...imageParts]

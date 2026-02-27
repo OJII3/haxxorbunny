@@ -58,8 +58,7 @@ src/
 │       ├── memory.ts     # 記憶・人格更新ツール群
 │       ├── goals.ts      # ゴール管理ツール群
 │       ├── heartbeat.ts  # 定期タスク管理ツール群 (list/update/create/delete)
-│       ├── home-channels.ts # ホームチャンネル管理ツール群 (list/add/remove)
-│       ├── channel-policy.ts # チャンネルポリシー管理ツール群 (set/get/remove + LLMパーシング)
+│       ├── channel-category.ts # チャンネルカテゴリ管理ツール群 (list/create/update/delete/assign/unassign)
 │       ├── avatar.ts     # プロフィール画像管理ツール群
 │       ├── web.ts        # Web検索・URL取得ツール群
 │       ├── voice.ts      # ボイスチャットツール群 (voice_reply, leave_voice)
@@ -86,8 +85,7 @@ src/
 │   ├── triage.ts         # トリアージ判定ロジック (mood連動の動的3段階方針)
 │   ├── triage-throttle.ts # チャンネルごとのスロットリング
 │   ├── reflection.ts     # triage後の軽量reflection (人格・記憶更新) + パトロール観察 (patrolReflect)
-│   ├── home-channels.ts  # ホームチャンネル管理 (読み書き・判定)
-│   ├── channel-policy.ts # チャンネル別ポリシー管理 (読み書き・取得 + DEFAULT_NON_HOME_POLICY)
+│   ├── channel-category.ts # チャンネルカテゴリ管理 (カテゴリCRUD・振る舞い判定・旧データ移行)
 │   ├── memory.ts         # 記憶管理 (ギルド + グローバル CRUD/toPrompt + 感情スコアリング)
 │   ├── memory-filter.ts  # AI/bot 自覚記憶フィルタ (isAISelfAwareness, filterMemoryEntry)
 │   ├── goals.ts          # ゴール管理 (CRUD + goalsToPrompt)
@@ -120,8 +118,7 @@ data/
 │   └── {guildId}/
 │       ├── memory.json       # MEMORY: 長期記憶 (bot が自動更新)
 │       ├── goals.json        # GOALS: ゴール管理 (bot が自己更新可能)
-│       ├── home-channels.json # HOME CHANNELS: ホームチャンネル設定 (bot が自己更新可能)
-│       ├── channel-policies.json # CHANNEL POLICIES: チャンネル別トリアージポリシー (bot が自己更新可能)
+│       ├── channel-categories.json # CHANNEL CATEGORIES: チャンネルカテゴリ設定 (bot が自己更新可能)
 │       └── memory/           # 日次記憶蒸留
 │           └── YYYY-MM-DD.json
 ├── avatars/              # アバター画像 + メタデータ
@@ -216,21 +213,16 @@ scripts/
 | `change_avatar` | `avatar_id`, `reason` | アバター変更（reason 必須で記録。30分クールダウンあり）|
 | `get_avatar_status` | (なし) | 現在のアバター + クールダウン残り時間 |
 
-**ホームチャンネルツール:**
+**チャンネルカテゴリツール:**
 
 | ツール名 | パラメータ | 説明 |
 |---------|-----------|------|
-| `list_home_channels` | (なし) | ホームチャンネル一覧を表示 |
-| `add_home_channel` | `channel_id` | チャンネルをホームチャンネルに追加 |
-| `remove_home_channel` | `channel_id` | チャンネルをホームチャンネルから削除 |
-
-**チャンネルポリシーツール:**
-
-| ツール名 | パラメータ | 説明 |
-|---------|-----------|------|
-| `set_channel_policy` | `channel_id`, `description` | 自然言語で方針を指定 → triageLlm がパラメータ化 → 保存 |
-| `get_channel_policy` | `channel_id?` | チャンネルのポリシーを確認（省略時は現在のチャンネル） |
-| `remove_channel_policy` | `channel_id` | ポリシーを削除してデフォルト動作に戻す |
+| `list_categories` | (なし) | 全カテゴリ一覧と所属チャンネルを表示 |
+| `create_category` | `id`, `name`, `description`, `behavior_description` | カスタムカテゴリを作成（behavior_description は自然言語→LLMパース） |
+| `update_category` | `category_id`, `name?`, `description?`, `behavior_description?` | カテゴリの名前・説明・振る舞いを更新（ビルトインも振る舞いのみ更新可） |
+| `delete_category` | `category_id` | カスタムカテゴリを削除（ビルトインは不可。所属チャンネルは未分類に戻る） |
+| `assign_channel` | `channel_id`, `category_id` | チャンネルをカテゴリに割り当て（既に他カテゴリにあれば移動） |
+| `unassign_channel` | `channel_id` | チャンネルをカテゴリから外す（未分類に戻す） |
 
 **AI質問ツール:**
 
@@ -267,16 +259,19 @@ scripts/
 | `> 0.4` | 普通 | メンション・直接質問・混乱整理のみ | 発言するほどではないが何か感じた時 | 基本はこちら |
 | `≤ 0.4` | 控えめ | メンションのみに反応 | 非常に印象的な時だけまれに | 基本はこちら |
 
-**チャンネル別ポリシー:** チャンネルごとにトリアージの反応方針を `set_channel_policy` ツールで設定可能。自然言語の説明を triageLlm がパラメータ化（`avg_offset`, `allow_react`, `custom_instructions`）して `data/guilds/{guildId}/channel-policies.json` に保存。カスタムポリシー未設定の非ホームチャンネルには `DEFAULT_NON_HOME_POLICY`（avg_offset: -0.3, allow_react: false）が適用される。メンション時はポリシーをバイパス。ホームチャンネル未設定時は全チャンネルがホーム扱い（後方互換）。
+**チャンネルカテゴリシステム:** チャンネルの役割をカテゴリで分類し、カテゴリごとに振る舞い（`avg_offset`, `allow_react`, `allow_unsolicited`, `respond_to_bots`, `custom_instructions`）を定義。プリセットカテゴリ: `my-space`（自分の居場所、自発的発言OK）、`observe-only`（観察のみ、リアクションのみ）、`bot-chat`（bot同士の会話）。未分類チャンネルでは全行動を控える（メンション時のみ反応）。メンション時はカテゴリをバイパス。`data/guilds/{guildId}/channel-categories.json` に保存。旧データ（home-channels.json, channel-policies.json）からの自動移行対応。
 
 ### イベントフロー（エージェントループ）
 
 ```
-メッセージ受信 → Bot→DB保存のみ → メンション判定 → ホームCH外+非メンション+非botリプライ→スキップ(**)
+メッセージ受信 → Bot判定
+  ├─ 自分自身 → DB保存のみ
+  ├─ 他bot → DB保存 → bot-chatカテゴリ？ → No→スキップ / Yes→ループ防止チェック→処理続行
+  └─ 人間 → メンション判定 → 未分類CH+非メンション+非botリプライ→スキップ(**)
                                                     ↓ (それ以外)
                                        DB保存 → markActivity → デバウンスバッファ(3秒)
                                                     ↓ (追加メッセージなし or 15秒超過)
-                                       結合コンテンツ生成 → スロットル判定(*) → トリアージLLM(mood連動) → 判定
+                                       結合コンテンツ生成 → スロットル判定(*) → トリアージLLM(mood連動+カテゴリ振る舞い) → 判定
                                                            (* メンション時はスロットルをバイパス)
                                                            (** DB保存もトリアージも完全スキップ)
   トリアージ結果:
@@ -348,8 +343,8 @@ cron (2時間) — 低頻度タスク
 - **自動 typing インジケーター**: エージェントループ中は5秒間隔で sendTyping() を呼び、Discord 上に「入力中…」を表示
 - **ゴール駆動行動**: bot が自分で目標を設定し、cron で定期的に進捗確認・アクション実行
 - **チャンネル巡回（観察モード）**: bot が不在のチャンネルを定期的にスキャン（上位3チャンネル）。`patrolReflect()` で会話を観察し、interests/topics/mood の微調整・記憶保存・リアクション（最大2件）のみ実行。テキスト発言は一切しない
-- **ホームチャンネル**: bot が積極的に会話に参加するチャンネルを `list_home_channels` / `add_home_channel` / `remove_home_channel` ツールで管理。ホームチャンネル未設定時は全チャンネルがホーム扱い（後方互換）。設定は `data/guilds/{guildId}/home-channels.json` に保存。ユーザーが「ここで話していいよ」「このチャンネルにもいて」等の暗黙的な参加歓迎ニュアンスを示した場合にも自律的にホームチャンネルを追加する（「ホーム」というワード不要）。逆に拒否ニュアンスの場合は削除を検討する
-- **チャンネル別トリアージポリシー**: bot が `set_channel_policy` / `get_channel_policy` / `remove_channel_policy` ツールでチャンネルごとの反応方針を自律的に管理。自然言語の説明を triageLlm が構造化パラメータ（avg_offset, allow_react, custom_instructions）に変換して保存。カスタムポリシー未設定の非ホームチャンネルにはデフォルトの保守的ポリシー（avg_offset: -0.3, allow_react: false）が適用される。メンション時はポリシーをバイパス
+- **チャンネルカテゴリシステム**: チャンネルの役割をカテゴリで分類し、カテゴリごとに振る舞いを定義する統合管理システム。`list_categories` / `create_category` / `update_category` / `delete_category` / `assign_channel` / `unassign_channel` の6ツールで管理。プリセットカテゴリ: `my-space`（自分の居場所、avg_offset=+0.5、自発的発言OK）、`observe-only`（観察のみ、avg_offset=-0.8、リアクションのみ）、`bot-chat`（bot会話、avg_offset=+0.3、respond_to_bots=true）。未分類チャンネルでは全行動を控える（メンション時のみ反応）。カスタムカテゴリは最大5個、自然言語で振る舞いを記述すると triageLlm がパラメータ化。旧データ（home-channels.json→my-space、channel-policies.json→カスタムカテゴリ）からの自動移行対応
+- **bot同士の会話**: bot-chat カテゴリに設定されたチャンネルでは、他 bot のメッセージにも人間と同じように反応。無限ループ防止として直近3件が連続 bot 発言の場合はスキップ（BOT_CHAIN_LIMIT=3）。会話履歴では自分のメッセージのみ assistant ロール、他 bot は user ロール
 - **メンション記憶強化**: メンション（直接の呼びかけ）による指示・依頼は忘れにくくする。AgentContext に `isMentioned` を伝播し、①システムプロンプトで save_memory を促す、②emotional_impact の最低値を 3 にフロアリング。30日後のスコアが impact=2 の ~0.425 → impact=3 の ~0.500 以上に改善
 - **自律的タスク管理**: bot が `list_tasks` / `update_task` / `create_task` / `delete_task` ツールで全定期タスクを自律的に管理可能。ビルトインタスク（autonomous_post, channel_patrol, goal_check, distill_memory, cleanup_old_memory, dream_processing）の有効/無効・間隔を変更でき、さらにカスタム定期タスク（最大5個）を自由に作成・編集・削除できる。カスタムタスクは指定したプロンプトに従ってエージェントループを定期実行する。HeartbeatTask に `type`（builtin/custom）、`prompt`（カスタムタスクの実行プロンプト）、`require_active_hours`（アクティブ時間帯限定、デフォルトtrue）フィールドを追加
 - **自律的プロフィール画像変更**: bot が `list_avatars` / `change_avatar` / `get_avatar_status` ツールでプロフィール画像を自律的に変更可能。30分のクールダウンで頻繁な変更を防止。変更履歴（直近20件）を記録。画像は `data/avatars/` に配置し `manifest.json` で管理
@@ -370,8 +365,7 @@ memory.json / goals.json はギルド（Discord サーバー）ごとに `data/g
 | global-memory.json | グローバル | 一般知識・夢の洞察（全サーバー共通） |
 | memory.json | ギルドごと | サーバーごとに独立した記憶 |
 | goals.json | ギルドごと | サーバーごとに独立した目標 |
-| home-channels.json | ギルドごと | サーバーごとに独立したホームチャンネル設定 |
-| channel-policies.json | ギルドごと | サーバーごとに独立したチャンネル別トリアージポリシー |
+| channel-categories.json | ギルドごと | サーバーごとに独立したチャンネルカテゴリ設定 |
 | heartbeat.json | グローバル | タスクスケジュールはボット全体の設定 |
 | avatars/manifest.json | グローバル | アバター画像定義はボット全体の設定 |
 | avatar-state.json | グローバル | アバター状態（変更は全サーバー共通） |
