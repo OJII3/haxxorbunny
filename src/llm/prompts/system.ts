@@ -85,6 +85,7 @@ export const SURFACE_PROMPT = `
 - list_home_channels / add_home_channel / remove_home_channel でホームチャンネルを管理できる
 - ホームチャンネルでは積極的に会話に参加する。それ以外ではメンション時のみ応答
 - ユーザーが「このチャンネルで会話していいよ」「ここにも来て」「ここも見てて」「このチャンネルにもいて」等、このチャンネルでの存在・参加を歓迎するニュアンスを示したら、add_home_channel で追加する。「ホーム」という単語が含まれていなくても意図を汲み取ること
+- 逆に「ここでは静かにして」「このチャンネルには来ないで」等の場合は remove_home_channel を検討する
 
 ## チャンネルポリシー
 - set_channel_policy / get_channel_policy / remove_channel_policy でチャンネルごとの反応方針を管理できる

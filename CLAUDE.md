@@ -340,7 +340,7 @@ cron (2時間) — 低頻度タスク
 - **自動 typing インジケーター**: エージェントループ中は5秒間隔で sendTyping() を呼び、Discord 上に「入力中…」を表示
 - **ゴール駆動行動**: bot が自分で目標を設定し、cron で定期的に進捗確認・アクション実行
 - **チャンネル巡回（観察モード）**: bot が不在のチャンネルを定期的にスキャン（上位3チャンネル）。`patrolReflect()` で会話を観察し、interests/topics/mood の微調整・記憶保存・リアクション（最大2件）のみ実行。テキスト発言は一切しない
-- **ホームチャンネル**: bot が積極的に会話に参加するチャンネルを `list_home_channels` / `add_home_channel` / `remove_home_channel` ツールで管理。ホームチャンネル未設定時は全チャンネルがホーム扱い（後方互換）。設定は `data/guilds/{guildId}/home-channels.json` に保存
+- **ホームチャンネル**: bot が積極的に会話に参加するチャンネルを `list_home_channels` / `add_home_channel` / `remove_home_channel` ツールで管理。ホームチャンネル未設定時は全チャンネルがホーム扱い（後方互換）。設定は `data/guilds/{guildId}/home-channels.json` に保存。ユーザーが「ここで話していいよ」「このチャンネルにもいて」等の暗黙的な参加歓迎ニュアンスを示した場合にも自律的にホームチャンネルを追加する（「ホーム」というワード不要）。逆に拒否ニュアンスの場合は削除を検討する
 - **チャンネル別トリアージポリシー**: bot が `set_channel_policy` / `get_channel_policy` / `remove_channel_policy` ツールでチャンネルごとの反応方針を自律的に管理。自然言語の説明を triageLlm が構造化パラメータ（avg_offset, allow_react, custom_instructions）に変換して保存。カスタムポリシー未設定の非ホームチャンネルにはデフォルトの保守的ポリシー（avg_offset: -0.3, allow_react: false）が適用される。メンション時はポリシーをバイパス
 - **メンション記憶強化**: メンション（直接の呼びかけ）による指示・依頼は忘れにくくする。AgentContext に `isMentioned` を伝播し、①システムプロンプトで save_memory を促す、②emotional_impact の最低値を 3 にフロアリング。30日後のスコアが impact=2 の ~0.425 → impact=3 の ~0.500 以上に改善
 - **自律的スケジュール調整**: bot が `get_posting_schedule` / `update_posting_schedule` ツールで独り言（autonomous_post）の頻度を自分で調整可能。気分や状況に応じて有効/無効の切り替えや間隔（1440〜10080分 = 1日〜1週間）の変更ができる
