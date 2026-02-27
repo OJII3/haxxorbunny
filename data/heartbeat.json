@@ -12,7 +12,7 @@
 		},
 		{
 			"id": "channel_patrol",
-			"description": "チャンネルを巡回して未参加の会話に反応する",
+			"description": "チャンネルを巡回して会話を観察し、リアクション・記憶・personality更新のみ行う",
 			"interval_minutes": 1440,
 			"enabled": true
 		},
