@@ -8,7 +8,10 @@ import {
 import type { AgentContext } from "../../agent/types.ts";
 import { client } from "../../client.ts";
 import { getRecentMessages, saveMessage } from "../../db/queries.ts";
-import { isHomeChannel } from "../../llm/home-channels.ts";
+import {
+	isChannelCategorized,
+	shouldRespondToBots,
+} from "../../llm/channel-category.ts";
 import { bufferMessage, setFlushHandler } from "../../llm/message-buffer.ts";
 import { loadPersonality } from "../../llm/prompts/personality.ts";
 import { reflect } from "../../llm/reflection.ts";
@@ -251,8 +254,22 @@ function appendImageInfo(content: string, message: Message): string {
 	return content ? `${content} ${tags}` : tags;
 }
 
+/** bot 連続発言の上限（無限ループ防止） */
+const BOT_CHAIN_LIMIT = 3;
+
+function isBotLoopDetected(channelId: string): boolean {
+	const recent = getRecentMessages(channelId, BOT_CHAIN_LIMIT + 1);
+	// 直近の連続 bot メッセージ数をカウント（新しい方から）
+	let botChain = 0;
+	for (let i = recent.length - 1; i >= 0; i--) {
+		if (recent[i]?.isBot) botChain++;
+		else break;
+	}
+	return botChain >= BOT_CHAIN_LIMIT;
+}
+
 export async function handleMessageCreate(message: Message): Promise<void> {
-	// Bot のメッセージは DB 保存のみ
+	// Bot のメッセージ: DB 保存 + bot-chat カテゴリなら処理続行
 	if (message.author.bot) {
 		saveMessage({
 			guildId: message.guildId ?? "",
@@ -262,16 +279,34 @@ export async function handleMessageCreate(message: Message): Promise<void> {
 			content: appendImageInfo(message.content, message),
 			isBot: message.author.bot,
 		});
-		return;
+		// 自分自身のメッセージは常にスキップ
+		if (message.author.id === client.user?.id) return;
+		// bot-chat カテゴリでなければスキップ
+		if (
+			!message.guildId ||
+			!shouldRespondToBots(message.guildId, message.channelId)
+		)
+			return;
+		// 無限ループ防止: 直近N件がbot連鎖ならスキップ
+		if (isBotLoopDetected(message.channelId)) {
+			console.log(
+				`[messageCreate] Bot loop detected in ${message.channelId}, skipping`,
+			);
+			return;
+		}
+		// 以降の処理に進む（バッファ→トリアージ）
 	}
 
 	// メンション判定（早期に行い、後続のフィルタとバッファの両方で使用）
 	const mentioned = isMentioned(message);
 
-	// ホームチャンネルでない + メンションなし + bot へのリプライでない → 完全スキップ（DB 保存もしない）
+	// 未分類チャンネル + メンションなし + bot へのリプライでない → 完全スキップ（DB 保存もしない）
 	if (message.guildId && !mentioned) {
-		const isHome = isHomeChannel(message.guildId, message.channelId);
-		if (!isHome) {
+		const categorized = isChannelCategorized(
+			message.guildId,
+			message.channelId,
+		);
+		if (!categorized) {
 			const replyToBot = await isReplyToBotMessage(message);
 			if (!replyToBot) {
 				return;
