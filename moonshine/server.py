@@ -72,9 +72,9 @@ async def inference(
 
         with torch.no_grad():
             generated_ids = model.generate(
-                inputs["input_features"],
+                inputs["input_values"],
+                attention_mask=inputs.get("attention_mask"),
                 max_new_tokens=256,
-                language=language,
             )
 
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
