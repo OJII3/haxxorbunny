@@ -24,11 +24,56 @@ function botUserId(): string {
 	return client.user?.id ?? "bot";
 }
 
+const MESSAGE_SOFT_CAP = 200;
+
+/**
+ * マークダウン装飾を除去する（多層防御の第2層）。
+ * プロンプト（第1層）で禁止しているが、LLM が無視した場合のフォールバック。
+ */
+export function stripMarkdown(text: string): string {
+	let result = text;
+	// コードブロック ```...``` → 中身のみ残す
+	result = result.replace(/```[\s\S]*?```/g, (match) => {
+		const inner = match.replace(/^```\w*\n?/, "").replace(/\n?```$/, "");
+		return inner;
+	});
+	// インラインコード `...` → 中身のみ残す
+	result = result.replace(/`([^`]+)`/g, "$1");
+	// 見出し（行頭の # のみ除去、URL 内の # は保持）
+	result = result.replace(/^#{1,6}\s+/gm, "");
+	// 太字 **...**
+	result = result.replace(/\*\*(.+?)\*\*/g, "$1");
+	// 斜体 *...* （顔文字の * は行頭/空白後のパターンのみ対象）
+	result = result.replace(/(?<=^|\s)\*([^*\n]+)\*(?=\s|$)/gm, "$1");
+	// 箇条書き（行頭の - ）
+	result = result.replace(/^-\s+/gm, "");
+	// 番号リスト（行頭の 1. 2. 等）
+	result = result.replace(/^\d+\.\s+/gm, "");
+	// 連続空行を1つに
+	result = result.replace(/\n{3,}/g, "\n\n");
+	return result.trim();
+}
+
+/**
+ * メッセージ送信前の共通処理: stripMarkdown 適用 + ソフトキャップ警告生成。
+ * 返り値: [処理済みテキスト, 警告文 or null]
+ */
+function processOutgoingMessage(content: string): [string, string | null] {
+	const cleaned = stripMarkdown(content);
+	const len = [...cleaned].length;
+	const warning =
+		len > MESSAGE_SOFT_CAP
+			? `(${len}文字 — 長すぎ。あなたらしく短く雑に、1〜2文で。次から気をつけて)`
+			: null;
+	return [cleaned, warning];
+}
+
 // ── handlers ──
 
 const sendMessage: ToolHandler = async (args, ctx) => {
-	const content = args.content as string;
-	if (!content) return fail("content is required");
+	const rawContent = args.content as string;
+	if (!rawContent) return fail("content is required");
+	const [content, lengthWarning] = processOutgoingMessage(rawContent);
 
 	// cron トリガー時のみ重複チェック
 	if (ctx.triggeredBy === "cron" && isDuplicate(ctx.guild.id, content)) {
@@ -63,13 +108,15 @@ const sendMessage: ToolHandler = async (args, ctx) => {
 		isBot: true,
 	});
 	const channelName = "name" in targetChannel ? targetChannel.name : "DM";
-	return ok(`Message sent to #${channelName}`);
+	const result = `Message sent to #${channelName}`;
+	return ok(lengthWarning ? `${result}\n${lengthWarning}` : result);
 };
 
 const replyToMessage: ToolHandler = async (args, ctx) => {
-	const content = args.content as string;
-	if (!content) return fail("content is required");
+	const rawContent = args.content as string;
+	if (!rawContent) return fail("content is required");
 	if (!ctx.triggerMessage) return fail("No trigger message to reply to");
+	const [content, lengthWarning] = processOutgoingMessage(rawContent);
 	await ctx.triggerMessage.reply({ content, allowedMentions: { parse: [] } });
 	saveMessage({
 		guildId: ctx.guild.id,
@@ -79,7 +126,8 @@ const replyToMessage: ToolHandler = async (args, ctx) => {
 		content,
 		isBot: true,
 	});
-	return ok("Reply sent");
+	const result = "Reply sent";
+	return ok(lengthWarning ? `${result}\n${lengthWarning}` : result);
 };
 
 const addReaction: ToolHandler = async (args, ctx) => {
@@ -96,15 +144,17 @@ const addReaction: ToolHandler = async (args, ctx) => {
 
 const editMessage: ToolHandler = async (args, ctx) => {
 	const messageId = args.message_id as string;
-	const content = args.content as string;
-	if (!messageId || !content)
+	const rawContent = args.content as string;
+	if (!messageId || !rawContent)
 		return fail("message_id and content are required");
+	const [content, lengthWarning] = processOutgoingMessage(rawContent);
 	try {
 		const msg = await ctx.channel.messages.fetch(messageId);
 		if (msg.author.id !== botUserId())
 			return fail("Can only edit own messages");
 		await msg.edit({ content, allowedMentions: { parse: [] } });
-		return ok("Message edited");
+		const result = "Message edited";
+		return ok(lengthWarning ? `${result}\n${lengthWarning}` : result);
 	} catch {
 		return fail("Failed to edit message");
 	}

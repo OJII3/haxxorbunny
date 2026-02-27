@@ -29,6 +29,45 @@ import type { AgentContext } from "./types.ts";
 const MAX_ITERATIONS = 5;
 const TEXT_ONLY_RETRY_MAX_LENGTH = 1000;
 
+/** depth injection 用のアイデンティティリマインダー */
+const IDENTITY_DEPTH_REMINDER = {
+	role: "system" as const,
+	content:
+		"[リマインド] あなたは 世界の泡の住人。短く雑に。1〜2文。プレーンテキストのみ。頭を使わない。",
+};
+
+/**
+ * 会話履歴の最新4メッセージ手前に短い system メッセージを挿入する（depth injection）。
+ * SillyTavern の depth injection パターンを適用。
+ * 会話メッセージ（user/assistant）が6件未満なら挿入しない。
+ */
+function injectIdentityReminder(
+	messages: Array<{
+		role: "system" | "user" | "assistant" | "tool";
+		content: unknown;
+		tool_calls?: unknown;
+		tool_call_id?: string;
+		name?: string;
+	}>,
+): void {
+	// 会話メッセージ（user/assistant）のインデックスを収集
+	const conversationIndices: number[] = [];
+	for (let i = 0; i < messages.length; i++) {
+		const role = messages[i]?.role;
+		if (role === "user" || role === "assistant") {
+			conversationIndices.push(i);
+		}
+	}
+
+	// 会話メッセージが6件未満なら挿入しない
+	if (conversationIndices.length < 6) return;
+
+	// 最新4メッセージ手前 = 後ろから5番目の会話メッセージの直前に挿入
+	const targetConvIdx = conversationIndices[conversationIndices.length - 4];
+	if (targetConvIdx === undefined) return;
+	messages.splice(targetConvIdx, 0, IDENTITY_DEPTH_REMINDER);
+}
+
 /**
  * text-only response リトライ時のプロンプトを組み立てる。
  * assistantContent は string | null（LLM の assembledContent）。
@@ -457,9 +496,9 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 			messages.push({
 				role: "system",
 				content:
-					"【重要】このメッセージはあなたへのメンション（直接の呼びかけ）です。" +
-					"指示・依頼・約束が含まれている場合は、必ず save_memory で記憶に保存してください（emotional_impact は 4 以上推奨）。" +
-					"既に覚えていることでも、改めて念押しされた場合は上書き保存してください。",
+					"名前を呼ばれた。いつも通り、短く雑に返す。" +
+					"印象的な内容があれば save_memory で覚えておく（emotional_impact 4 以上推奨）。" +
+					"ただし丁寧に答えたり長文で説明する必要はない。いつものあなたのまま。",
 			});
 		}
 	} else if (ctx.reactionContext) {
@@ -568,6 +607,9 @@ ${ctx.customTaskContext.taskPrompt}
 「何か投稿しなきゃ」という義務感での投稿は不要です。95% 以上の確率で do_nothing が正解です。`,
 		});
 	}
+
+	// depth injection: 会話履歴が十分長い場合、最新4メッセージ手前にリマインダーを挿入
+	injectIdentityReminder(messages);
 
 	const executedTools: string[] = [];
 	let messageSent = false;

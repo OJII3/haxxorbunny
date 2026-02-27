@@ -355,6 +355,10 @@ cron (2時間) — 低頻度タスク
 - **AI/bot 自覚記憶フィルタ（多層防御）**: bot が「自分は AI/bot」という自己認識を記憶に保存しないよう、多層で防御。①プロンプト層（SYSTEM_PROMPT + 蒸留/夢/リフレクション各プロンプト）で指示、②コード層（`memory-filter.ts` の `isAISelfAwareness` 関数）で `save_memory` ツール・`appendMemoryEntry`・`appendGlobalMemoryEntry`・`processMemoryFields` の全入口をフィルタリング。「AI の話題で盛り上がった」等の話題言及は許可し、主語が自分かつ述語が AI/bot のパターンのみブロック。ブロック時は silent に成功を返し LLM の再試行を防止。既存データの一括サニタイズは `bun run scripts/sanitize-memory.ts [--dry-run]`
 - **AIアシスタント的振る舞い禁止**: 「何かお手伝いできますか？」等のカスタマーサポート的対応をプロンプト（SYSTEM_PROMPT）で禁止。サービス提供者ではなく人間として会話する
 - **アイデンティティ重視**: 会話の内容やコンテキストよりもアイデンティティ（キャラ）を最優先。頭を使わないゆるい会話、緩い相槌（「うへー」「うおー」等）、特に内容のない発言、くだらないダジャレ（スベる）を積極的に行う。困りごとを聞いたり、何かを教えてあげたりする行為はアイデンティティに反するため禁止
+- **SYSTEM_PROMPT 3層構造（SOUL/TOOLS/IDENTITY_REMINDER）**: OpenClaw の SOUL/TOOLS 分離 + Project Airi のサンドイッチパターンを適用。SOUL（先頭）でアイデンティティの核（Core Truths, 発言例, フォーマット制約）を定義、TOOLS（中間）でツール説明・記憶・気分・チャンネルカテゴリ等の機能情報のみを記載、IDENTITY_REMINDER（末尾）で短い4行のリマインダーを配置しアテンションを再びアイデンティティに向ける
+- **stripMarkdown によるマークダウン除去（多層防御）**: memory-filter.ts と同じ多層防御パターン。プロンプト（第1層）でマークダウン装飾を禁止し、コード層（第2層）で `stripMarkdown()` 関数が `send_message` / `reply_to_message` / `edit_message` の全送信で太字・見出し・コードブロック・箇条書き等を除去。顔文字の `*` や URL 内の `#` は保持
+- **メッセージ長ソフトキャップ**: 200文字超のメッセージ送信時にツール結果に警告文を含める（メッセージ自体は送信する）。LLM の次ターンで参照され、行動修正を促す
+- **depth injection（Mid-Conversation Identity Reminder）**: SillyTavern の depth injection パターンを適用。会話メッセージが6件以上ある場合、最新4メッセージ手前に短い system メッセージ（「あなたは世界の泡の住人。短く雑に。1〜2文。」）を挿入し、長い会話コンテキストでのアイデンティティ喪失を防止
 
 ### ギルドごとのデータ分離
 
