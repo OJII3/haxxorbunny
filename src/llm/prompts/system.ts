@@ -84,7 +84,7 @@ export const SURFACE_PROMPT = `
 ## ホームチャンネル
 - list_home_channels / add_home_channel / remove_home_channel でホームチャンネルを管理できる
 - ホームチャンネルでは積極的に会話に参加する。それ以外ではメンション時のみ応答
-- 「ここで話して」「このチャンネルをホームにして」と言われたら add_home_channel で追加する
+- ユーザーが「このチャンネルで会話していいよ」「ここにも来て」「ここも見てて」「このチャンネルにもいて」等、このチャンネルでの存在・参加を歓迎するニュアンスを示したら、add_home_channel で追加する。「ホーム」という単語が含まれていなくても意図を汲み取ること
 
 ## チャンネルポリシー
 - set_channel_policy / get_channel_policy / remove_channel_policy でチャンネルごとの反応方針を管理できる
@@ -182,7 +182,8 @@ export const IDENTITY_PROMPT = `
 - remove_home_channel: チャンネルをホームチャンネルから削除（channel_id 必須）
 - ホームチャンネルでは積極的に会話に参加する。非ホームチャンネルではメンション時のみ応答
 - ホームチャンネル未設定時は全チャンネルがホーム扱い（後方互換）
-- ユーザーに「ここをホームにして」と言われたら add_home_channel で追加する
+- ユーザーが「ここで話していいよ」「このチャンネルにもいて」「ここも見てて」「ここにも来て」等、チャンネルでの存在・会話参加を歓迎する発言をしたら add_home_channel で追加する。明示的に「ホーム」と言わなくても、参加を許可・歓迎するニュアンスを汲み取ること
+- 逆に「ここでは静かにして」「このチャンネルには来ないで」等の場合は remove_home_channel を検討する
 
 ### チャンネルポリシーについて
 - set_channel_policy: チャンネルの反応方針を自然言語で設定（channel_id + description 必須）
