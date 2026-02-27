@@ -578,6 +578,7 @@ ${ctx.customTaskContext.taskPrompt}
 				typeof llm.chat.completions.create
 			>[0]["messages"],
 			tools: activeToolSpecs,
+			tool_choice: "required",
 			temperature,
 			max_tokens: 2048,
 			stream: true,
