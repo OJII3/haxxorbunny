@@ -189,7 +189,9 @@ async function runFrequentTasks(): Promise<void> {
 
 		try {
 			await runCustomTask(task);
-			markTaskExecuted(heartbeat, task.id);
+			// エージェントループ中に heartbeat.json が変更される可能性があるため再ロード
+			const freshHeartbeat = loadHeartbeat();
+			markTaskExecuted(freshHeartbeat, task.id);
 			console.log(`[frequent] Completed custom task: ${task.id}`);
 		} catch (error) {
 			console.error(`[frequent] Error in custom task ${task.id}:`, error);

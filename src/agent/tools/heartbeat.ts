@@ -76,16 +76,9 @@ const updateTaskHandler: ToolHandler = async (args) => {
 
 	if (!task) return fail(`タスク "${taskId}" が見つかりません`);
 
-	// ビルトインタスクの prompt 変更を拒否
+	// バリデーションを全て先に行い、変更適用は後にまとめる
 	if (task.type === "builtin" && prompt !== undefined) {
 		return fail("ビルトインタスクの prompt は変更できません");
-	}
-
-	const changes: string[] = [];
-
-	if (enabled !== undefined && enabled !== task.enabled) {
-		task.enabled = enabled;
-		changes.push(`enabled → ${enabled}`);
 	}
 
 	if (intervalMinutes !== undefined) {
@@ -96,10 +89,26 @@ const updateTaskHandler: ToolHandler = async (args) => {
 				`interval_minutes は ${minInterval}〜${MAX_INTERVAL} の範囲で指定してください`,
 			);
 		}
-		if (intervalMinutes !== task.interval_minutes) {
-			task.interval_minutes = intervalMinutes;
-			changes.push(`interval_minutes → ${intervalMinutes}`);
-		}
+	}
+
+	if (prompt !== undefined && prompt.length > MAX_PROMPT_LENGTH) {
+		return fail(`prompt は ${MAX_PROMPT_LENGTH} 文字以内にしてください`);
+	}
+
+	// バリデーション通過後に変更を適用
+	const changes: string[] = [];
+
+	if (enabled !== undefined && enabled !== task.enabled) {
+		task.enabled = enabled;
+		changes.push(`enabled → ${enabled}`);
+	}
+
+	if (
+		intervalMinutes !== undefined &&
+		intervalMinutes !== task.interval_minutes
+	) {
+		task.interval_minutes = intervalMinutes;
+		changes.push(`interval_minutes → ${intervalMinutes}`);
 	}
 
 	if (description !== undefined && description !== task.description) {
@@ -108,9 +117,6 @@ const updateTaskHandler: ToolHandler = async (args) => {
 	}
 
 	if (prompt !== undefined && prompt !== task.prompt) {
-		if (prompt.length > MAX_PROMPT_LENGTH) {
-			return fail(`prompt は ${MAX_PROMPT_LENGTH} 文字以内にしてください`);
-		}
 		task.prompt = prompt;
 		changes.push(
 			`prompt → ${prompt.slice(0, 50)}${prompt.length > 50 ? "…" : ""}`,

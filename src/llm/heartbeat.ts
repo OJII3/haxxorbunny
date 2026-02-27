@@ -54,7 +54,7 @@ export function loadHeartbeat(): Heartbeat {
 	try {
 		const raw = readFileSync(HEARTBEAT_PATH, "utf-8");
 		const heartbeat = JSON.parse(raw) as Heartbeat;
-		// マイグレーション: type 未設定タスクに "builtin" を自動補完
+		// フォールバック: type 未設定タスクに "builtin" を自動補完（ファイルには書き戻さず毎回適用）
 		for (const task of heartbeat.tasks) {
 			if (!task.type) {
 				task.type = "builtin";
