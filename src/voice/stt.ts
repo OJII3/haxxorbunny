@@ -3,8 +3,8 @@ import { pcmToWav } from "./audio-utils.ts";
 import { SAMPLE_RATE } from "./constants.ts";
 
 /**
- * PCM バッファを whisper.cpp サーバーに送信してテキストに変換する。
- * whisper.cpp の /inference エンドポイントを使用。
+ * PCM バッファを Moonshine ASR サーバーに送信してテキストに変換する。
+ * whisper.cpp 互換の /inference エンドポイントを使用。
  */
 export async function speechToText(
 	pcmBuffer: Buffer,
@@ -21,15 +21,13 @@ export async function speechToText(
 	formData.append("response_format", "json");
 	formData.append("language", "ja");
 
-	const response = await fetch(`${config.voice.whisperUrl}/inference`, {
+	const response = await fetch(`${config.voice.sttUrl}/inference`, {
 		method: "POST",
 		body: formData,
 	});
 
 	if (!response.ok) {
-		throw new Error(
-			`whisper.cpp STT failed: ${response.status} ${response.statusText}`,
-		);
+		throw new Error(`STT failed: ${response.status} ${response.statusText}`);
 	}
 
 	const result = (await response.json()) as { text?: string };
