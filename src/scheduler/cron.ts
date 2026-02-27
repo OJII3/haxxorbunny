@@ -1,5 +1,10 @@
 import { existsSync, readdirSync, unlinkSync } from "node:fs";
-import { ChannelType, type Guild, type TextChannel } from "discord.js";
+import {
+	ChannelType,
+	type Guild,
+	PermissionFlagsBits,
+	type TextChannel,
+} from "discord.js";
 import { isAgentBusyForGuild, runAgentLoop } from "../agent/loop.ts";
 import type { AgentContext } from "../agent/types.ts";
 import { client } from "../client.ts";
@@ -14,18 +19,36 @@ import {
 	shouldRunTask,
 } from "../llm/heartbeat.ts";
 import { trimGlobalMemory } from "../llm/memory.ts";
+import { hasChannelPerms } from "../utils/permissions.ts";
 
 function selectChannel(guild: Guild): TextChannel | undefined {
+	const botId = guild.client.user?.id;
+	if (!botId) return undefined;
 	const activeIds = getActiveChannelIds(guild.id);
 	for (const id of activeIds) {
 		const ch = guild.channels.cache.get(id);
-		if (ch?.type === ChannelType.GuildText) {
+		if (
+			ch?.type === ChannelType.GuildText &&
+			hasChannelPerms(
+				ch as TextChannel,
+				botId,
+				PermissionFlagsBits.ViewChannel,
+				PermissionFlagsBits.SendMessages,
+			)
+		) {
 			return ch as TextChannel;
 		}
 	}
-	return guild.channels.cache.find((ch) => ch.type === ChannelType.GuildText) as
-		| TextChannel
-		| undefined;
+	return guild.channels.cache.find(
+		(ch) =>
+			ch.type === ChannelType.GuildText &&
+			hasChannelPerms(
+				ch as TextChannel,
+				botId,
+				PermissionFlagsBits.ViewChannel,
+				PermissionFlagsBits.SendMessages,
+			),
+	) as TextChannel | undefined;
 }
 
 async function postToGuild(guild: Guild): Promise<void> {
