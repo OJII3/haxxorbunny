@@ -12,6 +12,7 @@ import {
 	saveBotAction,
 	saveMessage,
 } from "../../db/queries.ts";
+import { isHomeChannel } from "../../llm/home-channels.ts";
 import { bufferMessage, setFlushHandler } from "../../llm/message-buffer.ts";
 import { loadPersonality } from "../../llm/prompts/personality.ts";
 import { reflect } from "../../llm/reflection.ts";
@@ -19,6 +20,21 @@ import { triage } from "../../llm/triage.ts";
 import { shouldSkipTriage } from "../../llm/triage-throttle.ts";
 import { formatJSTShort } from "../../utils/time.ts";
 import { voiceManager } from "../../voice/manager.ts";
+
+async function isReplyToBotMessage(message: Message): Promise<boolean> {
+	if (!message.reference?.messageId) return false;
+	const botUser = client.user;
+	if (!botUser) return false;
+
+	try {
+		const refMessage =
+			message.channel.messages.cache.get(message.reference.messageId) ??
+			(await message.channel.messages.fetch(message.reference.messageId));
+		return refMessage.author.id === botUser.id;
+	} catch {
+		return false;
+	}
+}
 
 function isMentioned(message: Message): boolean {
 	const botUser = client.user;
@@ -262,7 +278,34 @@ function appendImageInfo(content: string, message: Message): string {
 }
 
 export async function handleMessageCreate(message: Message): Promise<void> {
-	// すべてのメッセージを DB に保存（画像情報をテキスト追記）
+	// Bot のメッセージは DB 保存のみ
+	if (message.author.bot) {
+		saveMessage({
+			guildId: message.guildId ?? "",
+			channelId: message.channelId,
+			userId: message.author.id,
+			username: message.author.displayName,
+			content: appendImageInfo(message.content, message),
+			isBot: message.author.bot,
+		});
+		return;
+	}
+
+	// メンション判定（早期に行い、後続のフィルタとバッファの両方で使用）
+	const mentioned = isMentioned(message);
+
+	// ホームチャンネルでない + メンションなし + bot へのリプライでない → 完全スキップ（DB 保存もしない）
+	if (message.guildId && !mentioned) {
+		const isHome = isHomeChannel(message.guildId, message.channelId);
+		if (!isHome) {
+			const replyToBot = await isReplyToBotMessage(message);
+			if (!replyToBot) {
+				return;
+			}
+		}
+	}
+
+	// DB 保存
 	saveMessage({
 		guildId: message.guildId ?? "",
 		channelId: message.channelId,
@@ -272,14 +315,8 @@ export async function handleMessageCreate(message: Message): Promise<void> {
 		isBot: message.author.bot,
 	});
 
-	// Bot のメッセージは無視
-	if (message.author.bot) return;
-
 	// アクティビティ記録（人間のメッセージのみ）
 	markActivity();
-
-	// メンション判定
-	const mentioned = isMentioned(message);
 
 	// VC 参加リクエストの検出（メンション + VCキーワード）
 	if (mentioned && isVoiceJoinRequest(message.content)) {
