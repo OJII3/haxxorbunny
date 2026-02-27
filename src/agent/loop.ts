@@ -25,6 +25,35 @@ import {
 import type { AgentContext } from "./types.ts";
 
 const MAX_ITERATIONS = 5;
+const TEXT_ONLY_RETRY_MAX_LENGTH = 1000;
+
+/**
+ * text-only response リトライ時のプロンプトを組み立てる。
+ * assistantContent は string | null（LLM の assembledContent）。
+ */
+export function buildTextOnlyRetryPrompt(
+	assistantContent: string | null,
+): string {
+	const textContent =
+		typeof assistantContent === "string"
+			? assistantContent.trim().slice(0, TEXT_ONLY_RETRY_MAX_LENGTH)
+			: "";
+	if (textContent) {
+		return (
+			"エラー: テキスト応答は無効です。あなたが返したテキストはユーザーには届いていません。\n" +
+			`あなたの応答内容:\n「${textContent}」\n\n` +
+			"この内容をユーザーに届けるために、reply_to_message または send_message ツールを使って送信してください。\n" +
+			"送信する必要がない場合は do_nothing ツールを使ってください。\n" +
+			"テキストを直接返してもユーザーには見えません。必ずツールを使ってください。"
+		);
+	}
+	return (
+		"エラー: テキスト応答は無効です。必ずツール（関数呼び出し）を使って行動してください。\n" +
+		"- メッセージを送りたい場合: send_message または reply_to_message ツールを使う\n" +
+		"- 何もしない場合: do_nothing ツールを使う\n" +
+		"テキストを直接返さず、ツールを呼び出してください。"
+	);
+}
 
 /**
  * tool_call の arguments をパースする。
@@ -715,23 +744,11 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 			console.warn(
 				`[agent] Text-only response detected (attempt ${textOnlyRetries}), requesting tool use retry`,
 			);
-			const textContent =
-				typeof assistantMessage.content === "string"
-					? assistantMessage.content.trim().slice(0, 1000)
-					: "";
-			const retryInstruction = textContent
-				? "エラー: テキスト応答は無効です。あなたが返したテキストはユーザーには届いていません。\n" +
-					`あなたの応答内容:\n「${textContent}」\n\n` +
-					"この内容をユーザーに届けるために、reply_to_message または send_message ツールを使って送信してください。\n" +
-					"送信する必要がない場合は do_nothing ツールを使ってください。\n" +
-					"テキストを直接返してもユーザーには見えません。必ずツールを使ってください。"
-				: "エラー: テキスト応答は無効です。必ずツール（関数呼び出し）を使って行動してください。\n" +
-					"- メッセージを送りたい場合: send_message または reply_to_message ツールを使う\n" +
-					"- 何もしない場合: do_nothing ツールを使う\n" +
-					"テキストを直接返さず、ツールを呼び出してください。";
 			messages.push({
 				role: "user",
-				content: retryInstruction,
+				content: buildTextOnlyRetryPrompt(
+					assistantMessage.content as string | null,
+				),
 			});
 			continue;
 		}
