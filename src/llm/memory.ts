@@ -217,10 +217,14 @@ export function appendGlobalMemoryEntry(
 			const existing = memory.entries[dupIndex] as MemoryEntry;
 			// 新しい impact が高ければ既存を更新
 			if (clampedImpact > existing.emotional_impact) {
-				existing.emotional_impact = clampedImpact;
+				const oldImpact = existing.emotional_impact;
+				memory.entries[dupIndex] = {
+					...existing,
+					emotional_impact: clampedImpact,
+				};
 				saveGlobalMemory(memory);
 				console.log(
-					`[global-memory] Skipped duplicate (impact updated ${existing.emotional_impact}→${clampedImpact}): ${entry}`,
+					`[global-memory] Skipped duplicate (impact updated ${oldImpact}→${clampedImpact}): ${entry}`,
 				);
 			} else {
 				console.log(
