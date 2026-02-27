@@ -314,18 +314,22 @@ export async function handleMessageCreate(message: Message): Promise<void> {
 		}
 	}
 
-	// DB 保存
-	saveMessage({
-		guildId: message.guildId ?? "",
-		channelId: message.channelId,
-		userId: message.author.id,
-		username: message.author.displayName,
-		content: appendImageInfo(message.content, message),
-		isBot: message.author.bot,
-	});
+	// DB 保存（bot メッセージは上で保存済みのためスキップ）
+	if (!message.author.bot) {
+		saveMessage({
+			guildId: message.guildId ?? "",
+			channelId: message.channelId,
+			userId: message.author.id,
+			username: message.author.displayName,
+			content: appendImageInfo(message.content, message),
+			isBot: message.author.bot,
+		});
+	}
 
 	// アクティビティ記録（人間のメッセージのみ）
-	markActivity();
+	if (!message.author.bot) {
+		markActivity();
+	}
 
 	// VC 参加リクエストの検出（メンション + VCキーワード）
 	if (mentioned && isVoiceJoinRequest(message.content)) {

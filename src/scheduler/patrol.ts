@@ -60,8 +60,7 @@ async function scanChannelsForGuild(guild: Guild): Promise<PatrolCandidate[]> {
 
 			// 直近メッセージの中に対象メッセージがあるか
 			// bot-chat カテゴリでは bot メッセージも巡回対象に含める
-			const isBotChat =
-				guild.id && shouldRespondToBots(guild.id, textChannel.id);
+			const isBotChat = shouldRespondToBots(guild.id, textChannel.id);
 			const targetMessages = isBotChat
 				? recentMessages.filter((m) => m.author.id !== client.user?.id)
 				: recentMessages.filter((m) => !m.author.bot);

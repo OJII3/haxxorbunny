@@ -2,7 +2,6 @@ import { config } from "../../config.ts";
 import {
 	type CategoryBehavior,
 	type ChannelCategory,
-	getPresetBehavior,
 	loadCategories,
 	saveCategories,
 } from "../../llm/channel-category.ts";
@@ -282,14 +281,6 @@ const assignChannelHandler: ToolHandler = async (args, ctx) => {
 		if (idx !== -1) {
 			movedFrom = cat.id;
 			cat.channel_ids.splice(idx, 1);
-		}
-	}
-
-	// ビルトインカテゴリの場合、プリセットの振る舞いを再適用
-	if (targetCategory.builtin) {
-		const presetBehavior = getPresetBehavior(targetCategory.id);
-		if (presetBehavior) {
-			targetCategory.behavior = { ...presetBehavior };
 		}
 	}
 

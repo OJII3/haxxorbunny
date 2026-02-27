@@ -150,12 +150,22 @@ function migrateFromLegacy(guildId: string): ChannelCategoriesData | null {
 					custom_instructions: string;
 				}>;
 			};
+			const MAX_MIGRATED_CUSTOM = 5;
 			for (const policy of cpData.policies ?? []) {
 				// 既にどこかのカテゴリに含まれているかチェック
 				const alreadyAssigned = categories.some((c) =>
 					c.channel_ids.includes(policy.channel_id),
 				);
 				if (alreadyAssigned) continue;
+
+				// カスタムカテゴリ上限チェック
+				const customCount = categories.filter((c) => !c.builtin).length;
+				if (customCount >= MAX_MIGRATED_CUSTOM) {
+					console.warn(
+						`[channel-category] Migration: custom category limit reached (${MAX_MIGRATED_CUSTOM}), skipping policy for ${policy.channel_id}`,
+					);
+					continue;
+				}
 
 				// ポリシーの内容に基づいてカスタムカテゴリを作成
 				const customId = `migrated-${policy.channel_id.slice(-6)}`;
