@@ -1,4 +1,9 @@
-import type { Message } from "discord.js";
+import {
+	ChannelType,
+	type Message,
+	PermissionFlagsBits,
+	type TextChannel,
+} from "discord.js";
 import type { ChatCompletionContentPart } from "openai/resources/chat/completions";
 import { config } from "../config.ts";
 import { getRecentMessages, saveBotAction } from "../db/queries.ts";
@@ -15,6 +20,7 @@ import {
 	markChannelResponded,
 	unlockChannel,
 } from "../llm/triage-throttle.ts";
+import { hasChannelPerms } from "../utils/permissions.ts";
 import { formatJSTFull, formatJSTShort } from "../utils/time.ts";
 import {
 	getToolHandler,
@@ -274,6 +280,31 @@ function formatDbMessages(
 		.join("\n");
 }
 
+/**
+ * bot が対象チャンネルで sendTyping を呼べるか判定する。
+ * GuildText / GuildAnnouncement の場合は SendMessages 権限をチェックし、
+ * 権限がなければ false を返すことで Missing Access (403) エラーを防ぐ。
+ */
+function canSendTypingInChannel(ctx: AgentContext): boolean {
+	if (!("sendTyping" in ctx.channel)) return false;
+	// TextChannel（GuildText / GuildAnnouncement）の場合は権限チェック
+	if (
+		"type" in ctx.channel &&
+		(ctx.channel.type === ChannelType.GuildText ||
+			ctx.channel.type === ChannelType.GuildAnnouncement)
+	) {
+		const botId = ctx.guild.members.me?.id;
+		if (!botId) return false;
+		return hasChannelPerms(
+			ctx.channel as TextChannel,
+			botId,
+			PermissionFlagsBits.SendMessages,
+		);
+	}
+	// スレッド等その他の sendTyping 対応チャンネルはそのまま許可
+	return true;
+}
+
 /** エージェントループ本体 */
 export async function runAgentLoop(ctx: AgentContext): Promise<void> {
 	const channelId = ctx.channel.id;
@@ -293,15 +324,16 @@ async function _runAgentLoopInner(ctx: AgentContext): Promise<void> {
 	// typing インジケーター: LLM 応答中にユーザーへ「入力中…」を表示
 	// triage-react モードではリアクションのみの可能性が高いため typing を抑制
 	const skipTyping = ctx.triggeredBy === "triage-react";
+	const canType = !skipTyping && canSendTypingInChannel(ctx);
 	const sendTypingSafe = () => {
-		if ("sendTyping" in ctx.channel) {
+		if (canType) {
 			(ctx.channel as { sendTyping: () => Promise<void> })
 				.sendTyping()
 				.catch((e) => console.warn("[agent] sendTyping failed:", e));
 		}
 	};
-	if (!skipTyping) sendTypingSafe();
-	const typingInterval = skipTyping ? null : setInterval(sendTypingSafe, 5_000);
+	if (canType) sendTypingSafe();
+	const typingInterval = canType ? setInterval(sendTypingSafe, 5_000) : null;
 
 	try {
 		return await _runAgentLoopBody(ctx);
