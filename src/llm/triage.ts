@@ -1,6 +1,12 @@
 import { config } from "../config.ts";
 import { getLastBotAction, getRecentMessages } from "../db/queries.ts";
 import { formatJSTFull, formatJSTShort } from "../utils/time.ts";
+import {
+	type ChannelPolicy,
+	DEFAULT_NON_HOME_POLICY,
+	getChannelPolicy,
+} from "./channel-policy.ts";
+import { isHomeChannel } from "./home-channels.ts";
 import type { MoodState } from "./prompts/personality.ts";
 import { triageLlm } from "./triage-client.ts";
 
@@ -12,10 +18,24 @@ export interface TriageResult {
 }
 
 /**
- * mood の sociability + curiosity の平均で3段階の方針を切り替える
+ * mood の sociability + curiosity の平均で3段階の方針を切り替える。
+ * channelPolicy がある場合はそのオフセットを適用。
+ * 非ホーム + ポリシー未設定の場合は DEFAULT_NON_HOME_POLICY のオフセットを適用。
  */
-function buildTriageSystemPrompt(mood?: MoodState): string {
-	const avg = mood ? (mood.sociability + mood.curiosity) / 2 : 0.5;
+function buildTriageSystemPrompt(
+	mood?: MoodState,
+	options?: { isHome: boolean; channelPolicy?: ChannelPolicy | null },
+): string {
+	let avg = mood ? (mood.sociability + mood.curiosity) / 2 : 0.5;
+
+	if (options?.channelPolicy) {
+		// カスタムポリシーがある場合はそのオフセットを適用
+		avg = Math.max(0, Math.min(1, avg + options.channelPolicy.avg_offset));
+	} else if (options && !options.isHome) {
+		// 非ホーム + ポリシー未設定 → デフォルトの保守的オフセット
+		avg = Math.max(0, Math.min(1, avg + DEFAULT_NON_HOME_POLICY.avg_offset));
+	}
+	// ホーム + ポリシー未設定 → avg そのまま
 
 	let policySection: string;
 
@@ -89,6 +109,12 @@ function buildTriageSystemPrompt(mood?: MoodState): string {
 - react もめったに使わない。本当に印象的な時だけ`;
 	}
 
+	// カスタム指示の注入
+	let customSection = "";
+	if (options?.channelPolicy?.custom_instructions) {
+		customSection = `\n\n## このチャンネル固有のルール\n${options.channelPolicy.custom_instructions}`;
+	}
+
 	return `
 あなたは "世界の泡の住人" のトリアージ判定エンジンです。
 与えられたメッセージと会話コンテキストから、bot がこの会話に参加すべきかどうかを判定してください。
@@ -99,6 +125,7 @@ ${policySection}
 - 直近の会話の流れ（複数の話題が混在していないか）
 - メッセージの内容が誤解を招きそうかどうか
 - bot にメンションされているかどうか（コンテキストに記載あり）
+${customSection}
 
 ## 応答フォーマット
 JSON のみを返すこと。それ以外のテキストは一切不要。reasoning は10字以内。
@@ -115,7 +142,7 @@ function buildTriageContext(
 	authorName: string,
 	isMentioned: boolean,
 ): string {
-	const recentMessages = getRecentMessages(channelId, 10);
+	const recentMessages = getRecentMessages(channelId, 20);
 	const lastAction = getLastBotAction(channelId);
 
 	const now = new Date();
@@ -139,7 +166,7 @@ function buildTriageContext(
 ## チャンネル: #${channelName}
 ## 現在時刻: ${formatJSTFull(now)}
 
-## 直近の会話 (最新10件)
+## 直近の会話 (最新20件)
 ${conversationLog || "(なし)"}
 
 ## bot の最後のアクション
@@ -157,6 +184,7 @@ export async function triage(
 	authorName: string,
 	isMentioned: boolean,
 	mood?: MoodState,
+	options?: { guildId?: string },
 ): Promise<TriageResult> {
 	const context = buildTriageContext(
 		channelId,
@@ -166,7 +194,22 @@ export async function triage(
 		isMentioned,
 	);
 
-	const systemPrompt = buildTriageSystemPrompt(mood);
+	// ホームチャンネル判定（メンション時はペナルティなし）
+	let isHome = true;
+	if (options?.guildId) {
+		isHome = isMentioned ? true : isHomeChannel(options.guildId, channelId);
+	}
+
+	// チャンネルポリシーの読み込み（メンション時はバイパス）
+	let channelPolicy: ChannelPolicy | null = null;
+	if (options?.guildId && !isMentioned) {
+		channelPolicy = getChannelPolicy(options.guildId, channelId);
+	}
+
+	const systemPrompt = buildTriageSystemPrompt(mood, {
+		isHome,
+		channelPolicy,
+	});
 
 	try {
 		const response = await triageLlm.chat.completions.create({
@@ -211,6 +254,22 @@ export async function triage(
 		}
 
 		const parsed = JSON.parse(jsonMatch[0]) as TriageResult;
+
+		// ポリシーベースの react ブロック判定
+		const allowReact = channelPolicy
+			? channelPolicy.allow_react
+			: isHome
+				? true
+				: DEFAULT_NON_HOME_POLICY.allow_react;
+
+		if (parsed.action === "react" && !allowReact) {
+			console.log("[triage] react blocked by policy, downgrading to ignore");
+			return {
+				action: "ignore",
+				reasoning: `react blocked by policy: ${parsed.reasoning}`,
+				confidence: parsed.confidence,
+			};
+		}
 
 		// react で emoji がない場合は ignore にフォールバック
 		if (parsed.action === "react" && !parsed.emoji) {

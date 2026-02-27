@@ -4,15 +4,19 @@ import {
 	PermissionFlagsBits,
 	type TextChannel,
 } from "discord.js";
-import { isAgentBusyForGuild, runAgentLoop } from "../agent/loop.ts";
-import type { AgentContext } from "../agent/types.ts";
 import { client } from "../client.ts";
+import { getRecentMessages, saveBotAction } from "../db/queries.ts";
+import { patrolReflect } from "../llm/reflection.ts";
+import { formatJSTShort } from "../utils/time.ts";
 
 /** bot 最終発言から N 分以上経過したチャンネルのみ巡回対象 */
 const PATROL_THRESHOLD_MINUTES = 1440; // 24時間
 
 /** 直近の人間メッセージがこれより古いチャンネルは巡回対象外 (ミリ秒) */
 const PATROL_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7日
+
+/** 1ギルドあたり最大巡回チャンネル数 */
+const MAX_PATROL_CHANNELS = 3;
 
 interface PatrolCandidate {
 	channel: TextChannel;
@@ -89,16 +93,12 @@ async function scanChannelsForGuild(guild: Guild): Promise<PatrolCandidate[]> {
 }
 
 /**
- * チャンネル巡回を実行する
- * 全ギルドに対して、bot 発言から一定時間以上経過 + メッセージありのチャンネルから上位1つを選び、エージェントループ起動
+ * チャンネル巡回を実行する（観察モード）
+ * 全ギルドに対して、bot 発言から一定時間以上経過 + メッセージありのチャンネルから上位3つを選び、
+ * patrolReflect で観察（テキスト発言なし、リアクションのみ許可）
  */
 export async function patrolChannels(): Promise<void> {
 	for (const guild of client.guilds.cache.values()) {
-		if (isAgentBusyForGuild(guild.id)) {
-			console.log(`[patrol] Skipped ${guild.name}: agent is busy`);
-			continue;
-		}
-
 		const candidates = await scanChannelsForGuild(guild);
 		if (candidates.length === 0) {
 			console.log(`[patrol] ${guild.name}: No channels to patrol`);
@@ -110,28 +110,77 @@ export async function patrolChannels(): Promise<void> {
 			(a, b) => b.minutesSinceLastBotMessage - a.minutesSinceLastBotMessage,
 		);
 
-		const target = candidates[0];
-		if (!target) continue;
+		// 上位 MAX_PATROL_CHANNELS チャンネルを巡回
+		const targets = candidates.slice(0, MAX_PATROL_CHANNELS);
 
-		console.log(
-			`[patrol] Patrolling ${guild.name}/#${target.channel.name} (${Math.round(target.minutesSinceLastBotMessage)}min since last bot message)`,
-		);
+		for (const target of targets) {
+			console.log(
+				`[patrol] Observing ${guild.name}/#${target.channel.name} (${Math.round(target.minutesSinceLastBotMessage)}min since last bot message)`,
+			);
 
-		const agentCtx: AgentContext = {
-			channel: target.channel,
-			guild,
-			triggeredBy: "cron",
-			patrolContext: {
-				channelName: target.channel.name,
-				minutesSinceLastBotMessage: Math.round(
-					target.minutesSinceLastBotMessage,
-				),
-			},
-		};
+			// DB から直近メッセージを取得
+			const dbMessages = getRecentMessages(target.channel.id, 20);
+			const patrolMessages = dbMessages.map((m) => ({
+				username: m.username,
+				content: m.content,
+				createdAt: m.createdAt ? formatJSTShort(new Date(m.createdAt)) : "?",
+				isBot: m.isBot ?? false,
+			}));
 
-		await runAgentLoop(agentCtx);
-		console.log(
-			`[patrol] Patrol completed for ${guild.name}/#${target.channel.name}`,
-		);
+			const result = await patrolReflect(
+				guild.id,
+				target.channel.id,
+				target.channel.name,
+				patrolMessages,
+			);
+
+			// リアクションの適用（最大2件）
+			if (result?.reactions && result.reactions.length > 0) {
+				try {
+					const discordMessages = await target.channel.messages.fetch({
+						limit: 15,
+					});
+					const messageArray = [...discordMessages.values()].reverse();
+
+					for (const reaction of result.reactions.slice(0, 2)) {
+						const msg = messageArray[reaction.message_index];
+						if (msg) {
+							try {
+								await msg.react(reaction.emoji);
+								console.log(
+									`[patrol] Reacted ${reaction.emoji} to message by ${msg.author.displayName} in #${target.channel.name}`,
+								);
+							} catch (e) {
+								console.warn(
+									`[patrol] Failed to react in #${target.channel.name}:`,
+									e,
+								);
+							}
+						}
+					}
+				} catch (e) {
+					console.warn(
+						`[patrol] Failed to fetch messages for reactions in #${target.channel.name}:`,
+						e,
+					);
+				}
+			}
+
+			// ログ記録
+			saveBotAction({
+				guildId: guild.id,
+				channelId: target.channel.id,
+				action: "patrol_observe",
+				content: result?.reasoning ?? "no result",
+				reasoning: result
+					? `reactions: ${result.reactions?.length ?? 0}, memories: ${result.memories?.length ?? 0}, personality: ${result.personality_update ? "updated" : "no change"}`
+					: "patrol returned null",
+				triggeredBy: "patrol",
+			});
+
+			console.log(
+				`[patrol] Observation completed for ${guild.name}/#${target.channel.name}`,
+			);
+		}
 	}
 }

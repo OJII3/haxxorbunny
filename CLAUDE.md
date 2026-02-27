@@ -54,6 +54,8 @@ src/
 │       ├── memory.ts     # 記憶・人格更新ツール群
 │       ├── goals.ts      # ゴール管理ツール群
 │       ├── heartbeat.ts  # スケジュール管理ツール群 (独り言の頻度調整)
+│       ├── home-channels.ts # ホームチャンネル管理ツール群 (list/add/remove)
+│       ├── channel-policy.ts # チャンネルポリシー管理ツール群 (set/get/remove + LLMパーシング)
 │       ├── avatar.ts     # プロフィール画像管理ツール群
 │       ├── web.ts        # Web検索・URL取得ツール群
 │       ├── voice.ts      # ボイスチャットツール群 (voice_reply, leave_voice)
@@ -78,7 +80,9 @@ src/
 │   ├── thinking-client.ts # Thinking LLM クライアント (ai_ask 用、Gemini Pro)
 │   ├── triage.ts         # トリアージ判定ロジック (mood連動の動的3段階方針)
 │   ├── triage-throttle.ts # チャンネルごとのスロットリング
-│   ├── reflection.ts     # triage後の軽量reflection (人格・記憶更新)
+│   ├── reflection.ts     # triage後の軽量reflection (人格・記憶更新) + パトロール観察 (patrolReflect)
+│   ├── home-channels.ts  # ホームチャンネル管理 (読み書き・判定)
+│   ├── channel-policy.ts # チャンネル別ポリシー管理 (読み書き・取得 + DEFAULT_NON_HOME_POLICY)
 │   ├── memory.ts         # 記憶管理 (ギルド + グローバル CRUD/toPrompt + 感情スコアリング)
 │   ├── memory-filter.ts  # AI/bot 自覚記憶フィルタ (isAISelfAwareness, filterMemoryEntry)
 │   ├── goals.ts          # ゴール管理 (CRUD + goalsToPrompt)
@@ -94,7 +98,7 @@ src/
 ├── scheduler/
 │   ├── index.ts          # cron スケジューラー (13分 + 2時間 の2系統)
 │   ├── cron.ts           # 高頻度/低頻度タスク分離実行
-│   ├── patrol.ts         # チャンネル巡回ロジック
+│   ├── patrol.ts         # チャンネル巡回ロジック (観察モード: patrolReflect 使用、テキスト発言なし)
 │   └── goal-check.ts     # ゴールチェック cronタスク
 └── db/
     ├── index.ts          # DB 接続
@@ -111,6 +115,8 @@ data/
 │   └── {guildId}/
 │       ├── memory.json       # MEMORY: 長期記憶 (bot が自動更新)
 │       ├── goals.json        # GOALS: ゴール管理 (bot が自己更新可能)
+│       ├── home-channels.json # HOME CHANNELS: ホームチャンネル設定 (bot が自己更新可能)
+│       ├── channel-policies.json # CHANNEL POLICIES: チャンネル別トリアージポリシー (bot が自己更新可能)
 │       └── memory/           # 日次記憶蒸留
 │           └── YYYY-MM-DD.json
 ├── avatars/              # アバター画像 + メタデータ
@@ -204,6 +210,22 @@ scripts/
 | `change_avatar` | `avatar_id`, `reason` | アバター変更（reason 必須で記録。30分クールダウンあり）|
 | `get_avatar_status` | (なし) | 現在のアバター + クールダウン残り時間 |
 
+**ホームチャンネルツール:**
+
+| ツール名 | パラメータ | 説明 |
+|---------|-----------|------|
+| `list_home_channels` | (なし) | ホームチャンネル一覧を表示 |
+| `add_home_channel` | `channel_id` | チャンネルをホームチャンネルに追加 |
+| `remove_home_channel` | `channel_id` | チャンネルをホームチャンネルから削除 |
+
+**チャンネルポリシーツール:**
+
+| ツール名 | パラメータ | 説明 |
+|---------|-----------|------|
+| `set_channel_policy` | `channel_id`, `description` | 自然言語で方針を指定 → triageLlm がパラメータ化 → 保存 |
+| `get_channel_policy` | `channel_id?` | チャンネルのポリシーを確認（省略時は現在のチャンネル） |
+| `remove_channel_policy` | `channel_id` | ポリシーを削除してデフォルト動作に戻す |
+
 **AI質問ツール:**
 
 | ツール名 | パラメータ | 説明 |
@@ -240,6 +262,8 @@ scripts/
 | `> 0.4` | 普通 | メンション・直接質問・混乱整理のみ | 発言するほどではないが何か感じた時 | 基本はこちら |
 | `≤ 0.4` | 控えめ | メンションのみに反応 | 非常に印象的な時だけまれに | 基本はこちら |
 
+**チャンネル別ポリシー:** チャンネルごとにトリアージの反応方針を `set_channel_policy` ツールで設定可能。自然言語の説明を triageLlm がパラメータ化（`avg_offset`, `allow_react`, `custom_instructions`）して `data/guilds/{guildId}/channel-policies.json` に保存。カスタムポリシー未設定の非ホームチャンネルには `DEFAULT_NON_HOME_POLICY`（avg_offset: -0.3, allow_react: false）が適用される。メンション時はポリシーをバイパス。ホームチャンネル未設定時は全チャンネルがホーム扱い（後方互換）。
+
 ### イベントフロー（エージェントループ）
 
 ```
@@ -271,7 +295,7 @@ VC参加リクエスト（メンション + キーワード）
 
 cron (13分) — 高頻度タスク（agentBusy のみチェック）
   ├─ autonomous_post (60分, disabled): アクティブ時間内のみ → 自由行動プロンプト → エージェントループ（95%+ do_nothing）
-  ├─ channel_patrol (1440分=1日): 全チャンネルスキャン → bot不在24時間超 かつ 直近人間メッセージ7日以内のチャンネル → エージェントループ（99% do_nothing）
+  ├─ channel_patrol (1440分=1日): 全チャンネルスキャン → bot不在24時間超 かつ 直近人間メッセージ7日以内のチャンネル → patrolReflect（観察モード: 上位3チャンネル、テキスト発言なし、リアクション+記憶+personality更新のみ）
   └─ goal_check (720分=12時間): アクティブゴールあれば → 内部確認のみ（発言は基本しない）
 
 cron (2時間) — 低頻度タスク
@@ -288,7 +312,7 @@ cron (2時間) — 低頻度タスク
 |---------|-------------|-------------|
 | `triage` | `triggerMessage` | 会話履歴 + トリガーメッセージ |
 | `reaction` | `reactionContext` | リアクション情報 + 「反応する？」 |
-| `cron` + `patrolContext` | `patrolContext` | チャンネルの会話 + 「反応したいことがあれば」 |
+| `cron` + patrol | (patrolReflect) | 観察モード: patrolReflect() で会話観察 → personality/memory/reaction 更新（エージェントループ不使用） |
 | `cron` + `goalContext` | `goalContext` | ゴール情報 + 「アクションを取りたい？」 |
 | `cron` (デフォルト) | なし | 自由行動プロンプト（ゴール情報 + ツール案内） |
 | `voice` | `voiceContext` | トランスクリプト履歴 + 「voice_reply で返答」（MAX_ITER=3, temp=0.6） |
@@ -311,7 +335,9 @@ cron (2時間) — 低頻度タスク
 - **メッセージデバウンス**: 同一 channelId:userId の連続メッセージを3秒（`MESSAGE_BUFFER_MS`）蓄積。最大15秒（`MESSAGE_BUFFER_MAX_MS`）で強制フラッシュ。結合コンテンツとしてトリアージに渡す
 - **自動 typing インジケーター**: エージェントループ中は5秒間隔で sendTyping() を呼び、Discord 上に「入力中…」を表示
 - **ゴール駆動行動**: bot が自分で目標を設定し、cron で定期的に進捗確認・アクション実行
-- **チャンネル巡回**: bot が不在のチャンネルを定期的にスキャンし、直近7日以内に人間のメッセージがあれば参加を検討。古い話題には参加しない
+- **チャンネル巡回（観察モード）**: bot が不在のチャンネルを定期的にスキャン（上位3チャンネル）。`patrolReflect()` で会話を観察し、interests/topics/mood の微調整・記憶保存・リアクション（最大2件）のみ実行。テキスト発言は一切しない
+- **ホームチャンネル**: bot が積極的に会話に参加するチャンネルを `list_home_channels` / `add_home_channel` / `remove_home_channel` ツールで管理。ホームチャンネル未設定時は全チャンネルがホーム扱い（後方互換）。設定は `data/guilds/{guildId}/home-channels.json` に保存
+- **チャンネル別トリアージポリシー**: bot が `set_channel_policy` / `get_channel_policy` / `remove_channel_policy` ツールでチャンネルごとの反応方針を自律的に管理。自然言語の説明を triageLlm が構造化パラメータ（avg_offset, allow_react, custom_instructions）に変換して保存。カスタムポリシー未設定の非ホームチャンネルにはデフォルトの保守的ポリシー（avg_offset: -0.3, allow_react: false）が適用される。メンション時はポリシーをバイパス
 - **メンション記憶強化**: メンション（直接の呼びかけ）による指示・依頼は忘れにくくする。AgentContext に `isMentioned` を伝播し、①システムプロンプトで save_memory を促す、②emotional_impact の最低値を 3 にフロアリング。30日後のスコアが impact=2 の ~0.425 → impact=3 の ~0.500 以上に改善
 - **自律的スケジュール調整**: bot が `get_posting_schedule` / `update_posting_schedule` ツールで独り言（autonomous_post）の頻度を自分で調整可能。気分や状況に応じて有効/無効の切り替えや間隔（1440〜10080分 = 1日〜1週間）の変更ができる
 - **自律的プロフィール画像変更**: bot が `list_avatars` / `change_avatar` / `get_avatar_status` ツールでプロフィール画像を自律的に変更可能。30分のクールダウンで頻繁な変更を防止。変更履歴（直近20件）を記録。画像は `data/avatars/` に配置し `manifest.json` で管理
@@ -332,6 +358,8 @@ memory.json / goals.json はギルド（Discord サーバー）ごとに `data/g
 | global-memory.json | グローバル | 一般知識・夢の洞察（全サーバー共通） |
 | memory.json | ギルドごと | サーバーごとに独立した記憶 |
 | goals.json | ギルドごと | サーバーごとに独立した目標 |
+| home-channels.json | ギルドごと | サーバーごとに独立したホームチャンネル設定 |
+| channel-policies.json | ギルドごと | サーバーごとに独立したチャンネル別トリアージポリシー |
 | heartbeat.json | グローバル | タスクスケジュールはボット全体の設定 |
 | avatars/manifest.json | グローバル | アバター画像定義はボット全体の設定 |
 | avatar-state.json | グローバル | アバター状態（変更は全サーバー共通） |
