@@ -276,7 +276,7 @@ cron 発火時に、**白紙から考えさせるのではなく、溜まった�
 出力:
 {
   "channel_id": "...",
-  "channel_name": "times-haxxorbunny",
+  "channel_name": "times-bot-sekai",
   "strategy": "web_search_then_post" | "direct_post" | "goal_action" | "react_only" | "no_action",
   "search_query": "量子コンピュータ 最新",
   "post_style": "つぶやき" | "発見共有" | "感想" | "質問" | "進捗報告",

@@ -26,7 +26,7 @@ import {
 import { join } from "node:path";
 
 const DATA_DIR = join(import.meta.dir, "../data");
-const DB_PATH = join(DATA_DIR, "haxxorbunny.db");
+const DB_PATH = join(DATA_DIR, "bot-sekai.db");
 
 const guildId = process.argv[2];
 if (!guildId) {

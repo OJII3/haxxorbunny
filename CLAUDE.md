@@ -1,4 +1,4 @@
-# haxxorbunny
+# bot-sekai
 
 Discord に住む自律的エージェント bot。LLM (Gemini API OpenAI 互換エンドポイント) を使い、Tool-Use（関数呼び出し）方式で自律的に行動する。
 

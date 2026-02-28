@@ -23,10 +23,10 @@ user_invocable: true
 
 以下を並列で実行:
 
-- `podman logs haxxorbunny --since 1h --tail 500` で bot コンテナの直近ログを取得
-- `podman logs haxxorbunny-searxng --since 1h --tail 100` で SearXNG のログを取得
-- `podman logs haxxorbunny-voicevox --since 1h --tail 100` で VOICEVOX のログを取得
-- `podman logs haxxorbunny-moonshine --since 1h --tail 100` で Moonshine ASR のログを取得
+- `podman logs bot-sekai --since 1h --tail 500` で bot コンテナの直近ログを取得
+- `podman logs bot-sekai-searxng --since 1h --tail 100` で SearXNG のログを取得
+- `podman logs bot-sekai-voicevox --since 1h --tail 100` で VOICEVOX のログを取得
+- `podman logs bot-sekai-moonshine --since 1h --tail 100` で Moonshine ASR のログを取得
 
 ### 2. エラー・警告の分析
 

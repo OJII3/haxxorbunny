@@ -110,7 +110,7 @@ data/
 ├── avatars/              # アバター画像 + メタデータ
 │   └── manifest.json     # アバター定義（ID, ファイル名, 名前, 説明, タグ）
 ├── avatar-state.json     # アバター状態（実行時生成, gitignore）
-├── haxxorbunny.db        # SQLite DB (gitignore)
+├── bot-sekai.db          # SQLite DB (gitignore)
 scripts/
 ├── migrate-to-guild.ts       # 既存データ移行スクリプト
 ├── migrate-global-memory.ts  # ギルド記憶→グローバル記憶の分類移行スクリプト

@@ -1,5 +1,5 @@
 {
-	"name": "haxxorbunny",
+	"name": "bot-sekai",
 	"version": "0.1.0",
 	"module": "src/index.ts",
 	"type": "module",

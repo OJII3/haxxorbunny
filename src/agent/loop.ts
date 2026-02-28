@@ -374,7 +374,7 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 	const me = ctx.guild.members.me;
 	const identity: BotIdentity = {
 		botUserId: botUser?.id ?? config.discord.appId,
-		botUsername: botUser?.username ?? "haxxorbunny",
+		botUsername: botUser?.username ?? "bot-sekai",
 		displayName: me?.displayName ?? botUser?.displayName ?? "世界の泡の住人",
 	};
 	const systemPrompt = `${buildSystemPrompt(identity)}\n\n${personalityPrompt}\n${memoryPrompt}`;

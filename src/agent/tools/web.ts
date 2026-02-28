@@ -82,7 +82,7 @@ const fetchUrlHandler: ToolHandler = async (args) => {
 		const response = await fetch(url, {
 			signal: AbortSignal.timeout(10_000),
 			headers: {
-				"User-Agent": "haxxorbunny-bot/1.0",
+				"User-Agent": "bot-sekai/1.0",
 			},
 		});
 
