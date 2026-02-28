@@ -15,7 +15,7 @@ import { perceive } from "./perception.ts";
 import { plan } from "./planning.ts";
 import { pipelineReflect } from "./reflection.ts";
 import { extendedTriage } from "./triage.ts";
-import type { PipelineContext } from "./types.ts";
+import type { PerceptionResult, PipelineContext } from "./types.ts";
 
 // ギルドごとの busy 管理（pipeline 用）
 const _pipelineBusyMap = new Map<string, boolean>();
@@ -58,7 +58,7 @@ export async function runMessageFlow(
 }
 
 async function _runMessageFlowInner(
-	perception: import("./types.ts").PerceptionResult,
+	perception: PerceptionResult,
 ): Promise<void> {
 	const { guildId, guild } = perception;
 	const channelId = perception.channel.id;
@@ -69,13 +69,17 @@ async function _runMessageFlowInner(
 	const globalMemory = loadGlobalMemory();
 	const channelBehavior = getChannelBehavior(guildId, channelId);
 
+	// triggerMessage は perceive() で常に設定される
+	const triggerChannel = perception.triggerMessage?.channel as
+		| import("discord.js").TextBasedChannel
+		| undefined;
+
 	const ctx: PipelineContext = {
 		guild,
 		guildId,
 		channel:
-			perception.triggerMessage?.channel ??
-			(guild.channels.cache.values().next()
-				.value as import("discord.js").TextBasedChannel),
+			triggerChannel ??
+			(guild.systemChannel as import("discord.js").TextBasedChannel),
 		channelId,
 		triggerMessage: perception.triggerMessage,
 		isMentioned: perception.isMentioned,
@@ -83,7 +87,7 @@ async function _runMessageFlowInner(
 		mood: personality.mood,
 		memory,
 		globalMemory,
-		channelBehavior: channelBehavior ?? undefined,
+		channelBehavior,
 	};
 
 	// typing インジケーター

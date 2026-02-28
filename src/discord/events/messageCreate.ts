@@ -9,10 +9,8 @@ import {
 import { bufferMessage, setFlushHandler } from "../../llm/message-buffer.ts";
 import { shouldSkipTriage } from "../../llm/triage-throttle.ts";
 import { runMessageFlow } from "../../pipeline/message-flow.ts";
-import { IMAGE_CONTENT_TYPES } from "../../pipeline/perception.ts";
+import { appendImageInfo } from "../../pipeline/perception.ts";
 import { voiceManager } from "../../voice/manager.ts";
-
-const MAX_IMAGES_PER_MESSAGE = 4;
 
 async function isReplyToBotMessage(message: Message): Promise<boolean> {
 	if (!message.reference?.messageId) return false;
@@ -115,16 +113,6 @@ async function handleVoiceJoinRequest(message: Message): Promise<boolean> {
 	}
 
 	return true;
-}
-
-/** 画像 attachment の情報をテキストとして追記する */
-function appendImageInfo(content: string, message: Message): string {
-	const imageAttachments = [...message.attachments.values()]
-		.filter((a) => a.contentType && IMAGE_CONTENT_TYPES.has(a.contentType))
-		.slice(0, MAX_IMAGES_PER_MESSAGE);
-	if (imageAttachments.length === 0) return content;
-	const tags = imageAttachments.map((a) => `[画像: ${a.name}]`).join(" ");
-	return content ? `${content} ${tags}` : tags;
 }
 
 /** bot 連続発言の上限（無限ループ防止） */

@@ -67,7 +67,7 @@ energy=${mood.energy.toFixed(2)}, positivity=${mood.positivity.toFixed(2)}, soci
 				{ role: "user", content: context },
 			],
 			temperature: 0.3,
-			max_tokens: 2048,
+			max_tokens: 1024,
 		});
 
 		const raw = response.choices[0]?.message?.content?.trim();
@@ -100,10 +100,12 @@ energy=${mood.energy.toFixed(2)}, positivity=${mood.positivity.toFixed(2)}, soci
 			const update: Partial<Personality> = {};
 			if (result.personality_update.mood) {
 				update.mood = {
-					energy: result.personality_update.mood.energy ?? 0.5,
-					positivity: result.personality_update.mood.positivity ?? 0.5,
-					sociability: result.personality_update.mood.sociability ?? 0.5,
-					curiosity: result.personality_update.mood.curiosity ?? 0.5,
+					energy: result.personality_update.mood.energy ?? mood.energy,
+					positivity:
+						result.personality_update.mood.positivity ?? mood.positivity,
+					sociability:
+						result.personality_update.mood.sociability ?? mood.sociability,
+					curiosity: result.personality_update.mood.curiosity ?? mood.curiosity,
 				};
 			}
 			if (result.personality_update.recent_topics) {

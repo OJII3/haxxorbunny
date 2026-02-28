@@ -95,14 +95,6 @@ export interface ExecutionLog {
 	timestamp: string;
 }
 
-// ── Phase 5: Reflection ──
-
-export interface ReflectionThought {
-	content: string;
-	type: ThoughtType;
-	intensity: number;
-}
-
 // ── Pipeline Context ──
 
 export interface PipelineContext {

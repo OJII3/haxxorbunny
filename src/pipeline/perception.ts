@@ -51,7 +51,7 @@ export function buildConversationHistory(
 }
 
 /** 画像 attachment の情報をテキストとして追記する */
-function appendImageInfo(content: string, message: Message): string {
+export function appendImageInfo(content: string, message: Message): string {
 	const imageAttachments = [...message.attachments.values()]
 		.filter((a) => a.contentType && IMAGE_CONTENT_TYPES.has(a.contentType))
 		.slice(0, MAX_IMAGES_PER_MESSAGE);

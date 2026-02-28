@@ -5,11 +5,7 @@ import { config } from "../config.ts";
 import { llm } from "../llm/client.ts";
 import { memoryToPrompt } from "../llm/memory.ts";
 import { personalityToPrompt } from "../llm/prompts/personality.ts";
-import {
-	type BotIdentity,
-	buildSoul,
-	IDENTITY_REMINDER,
-} from "../llm/prompts/system.ts";
+import { type BotIdentity, buildSoul } from "../llm/prompts/system.ts";
 import { formatJSTFull, formatJSTShort } from "../utils/time.ts";
 import { buildGenerationSystemPrompt } from "./prompts/generation.ts";
 import type {
@@ -121,60 +117,6 @@ export async function generate(
 		return { text: stripMarkdown(text) };
 	} catch (error) {
 		console.error("[pipeline/generation] Error:", error);
-		return { text: "むむ" };
-	}
-}
-
-/**
- * Voice モード用生成
- * Phase 2 (計画) スキップ。temp=0.6, max_tokens=256
- */
-export async function generateForVoice(
-	_perception: PerceptionResult,
-	ctx: PipelineContext,
-	voiceTranscript: string,
-): Promise<GenerationResult> {
-	const botUser = client.user;
-	const me = ctx.guild.members.me;
-	const identity: BotIdentity = {
-		botUserId: botUser?.id ?? config.discord.appId,
-		botUsername: botUser?.username ?? "haxxorbunny",
-		displayName: me?.displayName ?? botUser?.displayName ?? "世界の泡の住人",
-	};
-
-	const soulText = buildSoul(identity);
-	const personalityPrompt = personalityToPrompt(ctx.personality);
-
-	const systemPrompt = `${soulText}\n${personalityPrompt}\n
-## ボイスモードのルール
-- 短く、テンポよく返す。50文字以内推奨
-- 長文禁止。1文で完結
-- プレーンテキストのみ
-${IDENTITY_REMINDER}`;
-
-	const messages: Array<{
-		role: "system" | "user";
-		content: string;
-	}> = [
-		{ role: "system", content: systemPrompt },
-		{ role: "user", content: `## 直近の会話（音声）\n${voiceTranscript}` },
-	];
-
-	try {
-		const response = await llm.chat.completions.create({
-			model: config.llm.model,
-			messages: messages as Parameters<
-				typeof llm.chat.completions.create
-			>[0]["messages"],
-			temperature: 0.6,
-			max_tokens: 256,
-		});
-
-		const text = response.choices[0]?.message?.content?.trim();
-		if (!text) return { text: "うーん" };
-		return { text: stripMarkdown(text) };
-	} catch (error) {
-		console.error("[pipeline/generation-voice] Error:", error);
 		return { text: "むむ" };
 	}
 }

@@ -1,6 +1,9 @@
 import type { ChatCompletionContentPart } from "openai/resources/chat/completions";
 import { config } from "../config.ts";
-import { personalityToPrompt } from "../llm/prompts/personality.ts";
+import {
+	type Personality,
+	personalityToPrompt,
+} from "../llm/prompts/personality.ts";
 import { triageLlm } from "../llm/triage-client.ts";
 import { buildPlanningSystemPrompt } from "./prompts/planning.ts";
 import type {
@@ -27,7 +30,7 @@ const DEFAULT_PLAN: PlanResult = {
 export async function plan(
 	triage: ExtendedTriageResult,
 	perception: PerceptionResult,
-	personality: import("../llm/prompts/personality.ts").Personality,
+	personality: Personality,
 ): Promise<PlanResult> {
 	const isReactMode = triage.action === "react";
 	const systemPrompt = buildPlanningSystemPrompt(isReactMode);
