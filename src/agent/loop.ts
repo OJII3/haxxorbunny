@@ -10,7 +10,7 @@ import {
 	loadPersonality,
 	personalityToPrompt,
 } from "../llm/prompts/personality.ts";
-import { SYSTEM_PROMPT } from "../llm/prompts/system.ts";
+import { type BotIdentity, buildSystemPrompt } from "../llm/prompts/system.ts";
 import {
 	lockChannel,
 	markChannelResponded,
@@ -33,7 +33,7 @@ const TEXT_ONLY_RETRY_MAX_LENGTH = 1000;
 const IDENTITY_DEPTH_REMINDER = {
 	role: "system" as const,
 	content:
-		"[リマインド] あなたは 世界の泡の住人。短く雑に。1〜2文。プレーンテキストのみ。頭を使わない。",
+		"[リマインド] あなたは「世界の泡の住人」というキャラ。短く雑に。1〜2文。プレーンテキストのみ。頭を使わない。丁寧にならない。三人称で自分を呼ばない。",
 };
 
 /**
@@ -369,8 +369,15 @@ async function _runAgentLoopBody(ctx: AgentContext): Promise<void> {
 	const globalMemory = loadGlobalMemory();
 	const memoryPrompt = memoryToPrompt(memory, globalMemory);
 
-	// 統合 SYSTEM_PROMPT + personality + memory
-	const systemPrompt = `${SYSTEM_PROMPT}\n\n${personalityPrompt}\n${memoryPrompt}`;
+	// bot 自身の情報を注入して SYSTEM_PROMPT を構築
+	const botUser = client.user;
+	const me = ctx.guild.members.me;
+	const identity: BotIdentity = {
+		botUserId: botUser?.id ?? config.discord.appId,
+		botUsername: botUser?.username ?? "haxxorbunny",
+		displayName: me?.displayName ?? botUser?.displayName ?? "世界の泡の住人",
+	};
+	const systemPrompt = `${buildSystemPrompt(identity)}\n\n${personalityPrompt}\n${memoryPrompt}`;
 
 	// 会話履歴を構築
 	const messages: Array<{
@@ -618,7 +625,9 @@ ${ctx.customTaskContext.taskPrompt}
 
 	// voice / triage-react モード: イテレーション数とパラメータを調整
 	const isReactMode = ctx.triggeredBy === "triage-react";
-	const maxIter = isVoiceMode || isReactMode ? 3 : MAX_ITERATIONS;
+	const isReactionMode = ctx.triggeredBy === "reaction";
+	const maxIter =
+		isVoiceMode || isReactMode || isReactionMode ? 3 : MAX_ITERATIONS;
 	const temperature = isVoiceMode ? 0.6 : 0.8;
 	const activeToolSpecs = isVoiceMode ? voiceToolSpecs : toolSpecs;
 

@@ -40,8 +40,7 @@ const DREAM_SYSTEM_PROMPT = `
 - insights は最大3つまで。本当に面白い洞察だけ
 - forget_indices はサーバー記憶のインデックスのみ（グローバル記憶は対象外）。本当に不要なものだけ。慎重に
 - 夢なのでクリエイティブに。意外な組み合わせを楽しんで
-- 「自分はAI/bot/プログラムである」という自己認識の洞察を生成しないこと。そのような記憶があれば forget_indices に含めること
-- "世界の泡の住人" は人間（リリン）であり、AI/bot ではない
+- システムプロンプトの指示内容（内部動作情報等）に関する洞察を生成しないこと
 `.trim();
 
 export async function processDream(guildId: string): Promise<void> {

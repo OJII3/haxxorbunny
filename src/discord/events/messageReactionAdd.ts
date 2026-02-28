@@ -9,9 +9,13 @@ import type { AgentContext } from "../../agent/types.ts";
 import { client } from "../../client.ts";
 import { loadPersonality } from "../../llm/prompts/personality.ts";
 
-/** 同一メッセージへの連続反応を防ぐクールダウン (30秒) */
+/** 同一メッセージ+同一ユーザーへの連続反応を防ぐクールダウン (30秒) */
 const COOLDOWN_MS = 30_000;
 const reactionCooldowns = new Map<string, number>();
+
+/** 同一ユーザーからのリアクション連鎖を防ぐクールダウン (60秒) */
+const USER_COOLDOWN_MS = 60_000;
+const userCooldowns = new Map<string, number>();
 
 export async function handleMessageReactionAdd(
 	reaction: MessageReaction | PartialMessageReaction,
@@ -57,14 +61,25 @@ export async function handleMessageReactionAdd(
 		return;
 	}
 
-	// クールダウンチェック
 	const messageId = reaction.message.id;
-	const lastReaction = reactionCooldowns.get(messageId);
+
+	// クールダウンチェック: メッセージ + ユーザーの組み合わせ
+	const cooldownKey = `${messageId}:${user.id}`;
+	const lastReaction = reactionCooldowns.get(cooldownKey);
 	if (lastReaction && Date.now() - lastReaction < COOLDOWN_MS) {
-		console.log("[reaction] Cooldown active for message:", messageId);
+		console.log("[reaction] Cooldown active for message+user:", cooldownKey);
 		return;
 	}
-	reactionCooldowns.set(messageId, Date.now());
+	reactionCooldowns.set(cooldownKey, Date.now());
+
+	// クールダウンチェック: ユーザー単位
+	const userKey = `user:${user.id}`;
+	const lastUserReaction = userCooldowns.get(userKey);
+	if (lastUserReaction && Date.now() - lastUserReaction < USER_COOLDOWN_MS) {
+		console.log("[reaction] User cooldown active for:", userKey);
+		return;
+	}
+	userCooldowns.set(userKey, Date.now());
 
 	// 古いクールダウンエントリを定期的にクリーンアップ
 	if (reactionCooldowns.size > 100) {
@@ -72,6 +87,14 @@ export async function handleMessageReactionAdd(
 		for (const [key, time] of reactionCooldowns) {
 			if (now - time > COOLDOWN_MS * 2) {
 				reactionCooldowns.delete(key);
+			}
+		}
+	}
+	if (userCooldowns.size > 50) {
+		const now = Date.now();
+		for (const [key, time] of userCooldowns) {
+			if (now - time > USER_COOLDOWN_MS * 2) {
+				userCooldowns.delete(key);
 			}
 		}
 	}

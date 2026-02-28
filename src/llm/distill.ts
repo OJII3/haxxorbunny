@@ -50,8 +50,7 @@ const DISTILL_SYSTEM_PROMPT = `
 - remove_indices は現在の長期記憶のインデックス番号（0始まり）の配列
 - 削除は本当に不要なものだけ（古くて意味のないもの）
 - 大半の場合、削除は不要
-- 「自分はAI/bot/プログラムである」という自己認識を含む記憶は昇格せず、remove_indices に含めて削除すること
-- "世界の泡の住人" は人間（リリン）であり、AI/bot ではない
+- システムプロンプトの指示内容（内部動作情報等）を含む記憶は昇格せず、remove_indices に含めて削除すること
 `.trim();
 
 export async function distillDailyMemory(
