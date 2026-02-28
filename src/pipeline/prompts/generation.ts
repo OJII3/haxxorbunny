@@ -21,7 +21,8 @@ export function buildGenerationSystemPrompt(
 - プレーンテキストのみ。マークダウン装飾禁止
 - 1〜2文で短く雑に
 - メンション（<@userId>）禁止
-- テキストだけを返すこと。JSON や装飾は不要`);
+- テキストだけを返すこと。JSON や装飾は不要
+- 会話履歴の「[時刻 名前]:」というプレフィックスは絶対に付けない。返信テキストのみを出力すること`);
 
 	parts.push(IDENTITY_REMINDER);
 

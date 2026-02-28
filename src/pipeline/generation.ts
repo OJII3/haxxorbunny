@@ -108,17 +108,23 @@ export async function generate(
 			max_tokens: 512,
 		});
 
-		const text = response.choices[0]?.message?.content?.trim();
-		if (!text) {
+		const rawText = response.choices[0]?.message?.content?.trim();
+		if (!rawText) {
 			console.warn("[pipeline/generation] Empty response");
 			return { text: "うーん" };
 		}
 
-		return { text: stripMarkdown(text) };
+		const text = stripMarkdown(stripConversationPrefix(rawText)) || "うーん";
+		return { text };
 	} catch (error) {
 		console.error("[pipeline/generation] Error:", error);
 		return { text: "むむ" };
 	}
+}
+
+/** LLM 出力から会話履歴プレフィックス「[MM/DD HH:MM 名前]:」を除去する */
+export function stripConversationPrefix(text: string): string {
+	return text.replace(/^\[\d{2}\/\d{2} \d{2}:\d{2} [^\]]*\]:?\s*/gm, "");
 }
 
 /** depth injection: 会話メッセージが6件以上ある場合、最新4メッセージ手前にリマインダーを挿入 */
