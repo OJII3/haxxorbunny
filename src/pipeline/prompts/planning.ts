@@ -14,6 +14,7 @@ JSON のみを返すこと。
 {
   "actions": ["react"],
   "reply_approach": null,
+  "reply_as_normal": false,
   "react_emoji": "👍",
   "should_memorize": false,
   "memo": null,
@@ -45,6 +46,7 @@ JSON のみを返すこと。
 {
   "actions": ["reply"],
   "reply_approach": "テキトーに返す",
+  "reply_as_normal": true,
   "react_emoji": null,
   "should_memorize": false,
   "memo": null,
@@ -56,10 +58,12 @@ JSON のみを返すこと。
 注意:
 - actions は複数指定可能（例: ["reply", "react", "memorize"]）
 - reply_approach は返信の方向性を1文で。生成フェーズに渡される
+- reply_as_normal: true にすると、リプライ（返信）ではなく通常メッセージとしてチャンネルに投稿する。基本は true にする。相手のメッセージに直接言及する場合や、文脈が分かりにくくなる場合のみ false（リプライ形式）にする
 - react_emoji は Unicode 絵文字1つ。リアクションしない場合は null
 - memo は30字以内。記憶する場合のみ
 - memo_impact は 1-5（1=些細, 5=非常に印象的）
 - search_query は検索する場合のクエリ
-- 自分のキャラ（短く雑に、頭を使わない）を忘れずに計画を立てる
+- 自分のキャラ（カジュアルだが丁寧さもある、ゆるい感じ）を忘れずに計画を立てる
+- reply_approach には具体的な内容や方向性を書く。「適当に返す」のような曖昧な指示は避ける
 `.trim();
 }

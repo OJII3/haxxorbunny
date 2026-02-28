@@ -3,6 +3,7 @@ import { getLastBotAction, getRecentMessages } from "../db/queries.ts";
 import { getChannelBehavior } from "../llm/channel-category.ts";
 import type { MoodState } from "../llm/prompts/personality.ts";
 import { triageLlm } from "../llm/triage-client.ts";
+import { parseLlmJson } from "../utils/parse-llm-json.ts";
 import { formatJSTFull, formatJSTShort } from "../utils/time.ts";
 import { buildExtendedTriageSystemPrompt } from "./prompts/triage.ts";
 import type { ExtendedTriageResult, PerceptionResult } from "./types.ts";
@@ -59,33 +60,13 @@ ${lastAction ? `${timeSinceLastAction} — action: ${lastAction.action}, content
 [${author}]: ${content}${mentionNote}
 `.trim();
 
+	const messages = [
+		{ role: "system" as const, content: systemPrompt },
+		{ role: "user" as const, content: context },
+	];
+
 	try {
-		const response = await triageLlm.chat.completions.create({
-			model: config.triage.model,
-			messages: [
-				{ role: "system", content: systemPrompt },
-				{ role: "user", content: context },
-			],
-			temperature: 0.3,
-			max_tokens: 1024,
-		});
-
-		const raw = response.choices[0]?.message?.content?.trim();
-		if (!raw) {
-			console.warn("[pipeline/triage] Empty response");
-			return defaultIgnore("Empty triage response");
-		}
-
-		const cleaned = raw
-			.replace(/^```(?:json)?\s*\n?/i, "")
-			.replace(/\n?```\s*$/i, "");
-		const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-		if (!jsonMatch) {
-			console.warn("[pipeline/triage] No valid JSON in response:", raw);
-			return defaultIgnore("No valid JSON in triage response");
-		}
-
-		const parsed = JSON.parse(jsonMatch[0]) as Partial<ExtendedTriageResult>;
+		const parsed = await callTriageWithRetry(messages);
 
 		// カテゴリベースの react ブロック判定
 		const allowReact = behavior ? behavior.allow_react : true;
@@ -113,6 +94,43 @@ ${lastAction ? `${timeSinceLastAction} — action: ${lastAction.action}, content
 		console.error("[pipeline/triage] Error:", error);
 		return defaultIgnore("Triage error");
 	}
+}
+
+/**
+ * Triage LLM を呼び出し、JSON パース失敗時は1回リトライする。
+ */
+async function callTriageWithRetry(
+	messages: { role: "system" | "user"; content: string }[],
+): Promise<Partial<ExtendedTriageResult>> {
+	const maxAttempts = 2;
+	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+		const response = await triageLlm.chat.completions.create({
+			model: config.triage.model,
+			messages,
+			temperature: 0.3,
+			max_tokens: 1024,
+		});
+
+		const raw = response.choices[0]?.message?.content?.trim();
+		if (!raw) {
+			console.warn(
+				`[pipeline/triage] Empty response (attempt ${attempt}/${maxAttempts})`,
+			);
+			continue;
+		}
+
+		const parsed = parseLlmJson<Partial<ExtendedTriageResult>>(raw);
+		if (parsed) {
+			return parsed;
+		}
+
+		console.warn(
+			`[pipeline/triage] No valid JSON (attempt ${attempt}/${maxAttempts}):`,
+			raw,
+		);
+	}
+
+	throw new Error("Triage JSON parse failed after retries");
 }
 
 function defaultIgnore(reasoning: string): ExtendedTriageResult {

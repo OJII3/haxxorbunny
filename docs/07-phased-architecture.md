@@ -92,6 +92,7 @@ PerceptionResult {
 {
   "actions": ["reply"],              // やること一覧
   "reply_approach": "テキトーに返す",  // 返信の方向性
+  "reply_as_normal": true,           // true=通常メッセージ、false=リプライ形式
   "react_emoji": null,               // リアクションする場合の絵文字
   "should_memorize": false,          // 記憶に残すか
   "memo": null,                      // 記憶する場合の内容（30字以内）
@@ -527,4 +528,4 @@ patrol cron → チャンネルスキャン → patrolReflect()
 - **voice モード:** リアルタイム性が求められるため、Phase 2（計画）を省略して Phase 1 → Phase 3 の直結が適切かもしれない
 - **react モード:** Phase 3（生成）が不要で Phase 2（計画）で emoji を決めて Phase 4 で実行するだけ。フェーズをスキップする仕組み
 - **thought buffer の永続性:** プロセス再起動時の復元、サイズ上限、古い断片の自然減衰
-- **エラーハンドリング:** 各フェーズで LLM が不正な出力を返した場合のフォールバック戦略
+- **エラーハンドリング:** 各フェーズで LLM が不正な出力を返した場合のフォールバック戦略（Phase 1 Triage では JSON パース失敗時に1回リトライ + 不完全 JSON 補完を実装済み）

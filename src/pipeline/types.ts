@@ -70,6 +70,7 @@ export type PlanAction =
 export interface PlanResult {
 	actions: PlanAction[];
 	reply_approach: string | null;
+	reply_as_normal: boolean;
 	react_emoji: string | null;
 	should_memorize: boolean;
 	memo: string | null;
