@@ -1,6 +1,9 @@
 import type { Message } from "discord.js";
 import { isAgentBusyForGuild } from "../agent/loop.ts";
-import { getChannelBehavior } from "../llm/channel-category.ts";
+import {
+	getCategoryForChannel,
+	getChannelBehavior,
+} from "../llm/channel-category.ts";
 import { loadGlobalMemory, loadMemory } from "../llm/memory.ts";
 import { loadPersonality } from "../llm/prompts/personality.ts";
 import {
@@ -68,6 +71,7 @@ async function _runMessageFlowInner(
 	const memory = loadMemory(guildId);
 	const globalMemory = loadGlobalMemory();
 	const channelBehavior = getChannelBehavior(guildId, channelId);
+	const channelCategory = getCategoryForChannel(guildId, channelId);
 
 	// triggerMessage は perceive() で常に設定される
 	const triggerChannel = perception.triggerMessage?.channel as
@@ -88,6 +92,8 @@ async function _runMessageFlowInner(
 		memory,
 		globalMemory,
 		channelBehavior,
+		isChannelCategorized: channelCategory !== null,
+		channelCategoryId: channelCategory?.id ?? null,
 	};
 
 	// typing インジケーター
@@ -137,7 +143,7 @@ async function _runMessageFlowInner(
 	try {
 		// Phase 2: 計画
 		console.log("[pipeline] Phase 2: Planning");
-		const planResult = await plan(triageResult, perception, personality);
+		const planResult = await plan(triageResult, perception, personality, ctx);
 		console.log(
 			`[pipeline/planning] actions: ${planResult.actions.join(",")} | approach: ${planResult.reply_approach}`,
 		);
