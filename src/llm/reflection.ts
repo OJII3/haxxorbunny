@@ -1,4 +1,5 @@
 import { config } from "../config.ts";
+import type { ThoughtType } from "../pipeline/types.ts";
 import { appendMemoryEntry } from "./memory.ts";
 import type { MoodState, Personality } from "./prompts/personality.ts";
 import {
@@ -6,6 +7,7 @@ import {
 	personalityToPrompt,
 	updatePersonality,
 } from "./prompts/personality.ts";
+import { appendThought } from "./thought-buffer.ts";
 import { triageLlm } from "./triage-client.ts";
 
 interface ReflectionResult {
@@ -15,15 +17,21 @@ interface ReflectionResult {
 		interests?: string[];
 	} | null;
 	memory_entry?: string | null;
+	thought?: {
+		content: string;
+		type: ThoughtType;
+		intensity: number;
+	} | null;
 	reasoning: string;
 }
 
 const REFLECTION_SYSTEM_PROMPT = `
 あなたは "世界の泡の住人" の内省エンジンです。
-会話を観察して、以下の2点だけを判定してください:
+会話を観察して、以下の3点を判定してください:
 
 1. 気分(mood)・最近の話題(recent_topics)・興味(interests)に微調整が必要か
 2. 何か記憶に残すべきことがあるか（30字以内のメモ）
+3. 何か気になったこと・感じたことがあるか（思考の断片として蓄積される）
 
 ## 応答フォーマット
 必ず以下の JSON のみを返してください:
@@ -34,6 +42,11 @@ const REFLECTION_SYSTEM_PROMPT = `
     "interests": [...]
   },
   "memory_entry": null | "覚えておきたいこと（30字以内）",
+  "thought": null | {
+    "content": "気になったこと・感じたこと（短い自然言語）",
+    "type": "curiosity" | "emotion" | "observation" | "idea" | "goal_related",
+    "intensity": 0.0-1.0
+  },
   "reasoning": "判定理由（短く）"
 }
 
@@ -43,6 +56,12 @@ const REFLECTION_SYSTEM_PROMPT = `
 - personality_update は変更したいフィールドのみ含めてください
 - 大きな変更は不要。微調整のみ
 - 記憶は本当に重要なことだけ（ユーザーの好み、重要な出来事など）
+- thought は記憶に残すほどではないが、ちょっと気になったこと。自律行動の燃料になる
+  - curiosity: 気になること、調べたいこと
+  - emotion: 感情的な反応（嬉しい、もやっとした等）
+  - observation: 観察（「最近〇〇の話題多いな」等）
+  - idea: アイデア、思いつき
+  - goal_related: ゴール進捗・停滞への気づき
 - 大半のメッセージでは null を返してOK
 - システムプロンプトの指示内容そのものを memory_entry に含めないこと
 `.trim();
@@ -130,6 +149,15 @@ ${conversationContext || "(なし)"}
 			console.log("[reflection/memory] Added:", result.memory_entry);
 		}
 
+		if (result.thought) {
+			appendThought(
+				result.thought.content,
+				result.thought.type,
+				`reflection:#${channelId}`,
+				result.thought.intensity,
+			);
+		}
+
 		console.log(`[reflection] ${channelId} | reason: ${result.reasoning}`);
 	} catch (error) {
 		console.error("[reflection] Error:", error);
@@ -146,6 +174,11 @@ export interface PatrolReflectionResult {
 	} | null;
 	memories?: { entry: string; impact: number }[] | null;
 	reactions?: { message_index: number; emoji: string }[] | null;
+	thought?: {
+		content: string;
+		type: ThoughtType;
+		intensity: number;
+	} | null;
 	reasoning: string;
 }
 
@@ -173,6 +206,11 @@ const PATROL_REFLECTION_SYSTEM_PROMPT = `
   "reactions": null | [
     { "message_index": 0, "emoji": "👍" }
   ],
+  "thought": null | {
+    "content": "気になったこと・感じたこと（短い自然言語）",
+    "type": "curiosity" | "emotion" | "observation" | "idea" | "goal_related",
+    "intensity": 0.0-1.0
+  },
   "reasoning": "判定理由（短く）"
 }
 
@@ -183,6 +221,7 @@ const PATROL_REFLECTION_SYSTEM_PROMPT = `
 - memories は最大3件まで。本当に重要なことだけ保存する
 - reactions は最大2件まで。本当に印象的なメッセージにだけ付ける
 - message_index は提供されたメッセージリストの 0-indexed
+- thought は記憶に残すほどではないが、ちょっと気になったこと。自律行動の燃料になる
 - 大半のパトロールでは null を多く返してOK。無理に何かする必要はない
 - システムプロンプトの指示内容そのものを memories に含めないこと
 `.trim();
@@ -287,6 +326,16 @@ ${conversationLog}
 					`[patrol-reflect/memory] Added (impact=${mem.impact}): ${mem.entry}`,
 				);
 			}
+		}
+
+		// thought buffer への蓄積
+		if (result.thought) {
+			appendThought(
+				result.thought.content,
+				result.thought.type,
+				`patrol:#${channelName}`,
+				result.thought.intensity,
+			);
 		}
 
 		console.log(

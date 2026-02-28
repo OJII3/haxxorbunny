@@ -58,7 +58,9 @@ export function stripMarkdown(text: string): string {
  * メッセージ送信前の共通処理: stripMarkdown 適用 + ソフトキャップ警告生成。
  * 返り値: [処理済みテキスト, 警告文 or null]
  */
-function processOutgoingMessage(content: string): [string, string | null] {
+export function processOutgoingMessage(
+	content: string,
+): [string, string | null] {
 	const cleaned = stripMarkdown(content);
 	const len = [...cleaned].length;
 	const warning =
@@ -68,15 +70,22 @@ function processOutgoingMessage(content: string): [string, string | null] {
 	return [cleaned, warning];
 }
 
-// ── handlers ──
+// ── core functions (used by pipeline execution) ──
 
-const sendMessage: ToolHandler = async (args, ctx) => {
-	const rawContent = args.content as string;
-	if (!rawContent) return fail("content is required");
-	const [content, lengthWarning] = processOutgoingMessage(rawContent);
+export interface SendMessageParams {
+	content: string;
+	channel: import("discord.js").TextBasedChannel;
+	guild: import("discord.js").Guild;
+	channelId?: string;
+	isCronTrigger?: boolean;
+}
 
-	// cron トリガー時のみ重複チェック
-	if (ctx.triggeredBy === "cron" && isDuplicate(ctx.guild.id, content)) {
+export async function sendMessageCore(
+	params: SendMessageParams,
+): Promise<ToolResult> {
+	const [content, lengthWarning] = processOutgoingMessage(params.content);
+
+	if (params.isCronTrigger && isDuplicate(params.guild.id, content)) {
 		console.log(
 			"[dedup] Blocked duplicate cron message:",
 			content.slice(0, 50),
@@ -86,21 +95,19 @@ const sendMessage: ToolHandler = async (args, ctx) => {
 		);
 	}
 
-	const channelId = args.channel_id as string | undefined;
-	let targetChannel = ctx.channel;
-
-	if (channelId && channelId !== ctx.channel.id) {
-		const ch = ctx.guild.channels.cache.get(channelId);
+	let targetChannel = params.channel;
+	if (params.channelId && params.channelId !== params.channel.id) {
+		const ch = params.guild.channels.cache.get(params.channelId);
 		if (!ch || !ch.isTextBased())
 			return fail("Channel not found or not text-based");
-		targetChannel = ch as GuildTextBasedChannel;
+		targetChannel = ch as import("discord.js").GuildTextBasedChannel;
 	}
 
 	if (!targetChannel.isSendable()) return fail("Channel is not sendable");
 	await targetChannel.send({ content, allowedMentions: { parse: [] } });
-	recordMessage(ctx.guild.id, content);
+	recordMessage(params.guild.id, content);
 	saveMessage({
-		guildId: ctx.guild.id,
+		guildId: params.guild.id,
 		channelId: targetChannel.id,
 		userId: botUserId(),
 		username: client.user?.displayName ?? "bot",
@@ -110,17 +117,26 @@ const sendMessage: ToolHandler = async (args, ctx) => {
 	const channelName = "name" in targetChannel ? targetChannel.name : "DM";
 	const result = `Message sent to #${channelName}`;
 	return ok(lengthWarning ? `${result}\n${lengthWarning}` : result);
-};
+}
 
-const replyToMessage: ToolHandler = async (args, ctx) => {
-	const rawContent = args.content as string;
-	if (!rawContent) return fail("content is required");
-	if (!ctx.triggerMessage) return fail("No trigger message to reply to");
-	const [content, lengthWarning] = processOutgoingMessage(rawContent);
-	await ctx.triggerMessage.reply({ content, allowedMentions: { parse: [] } });
+export interface ReplyToMessageParams {
+	content: string;
+	triggerMessage: import("discord.js").Message;
+	guild: import("discord.js").Guild;
+	channel: import("discord.js").TextBasedChannel;
+}
+
+export async function replyToMessageCore(
+	params: ReplyToMessageParams,
+): Promise<ToolResult> {
+	const [content, lengthWarning] = processOutgoingMessage(params.content);
+	await params.triggerMessage.reply({
+		content,
+		allowedMentions: { parse: [] },
+	});
 	saveMessage({
-		guildId: ctx.guild.id,
-		channelId: ctx.channel.id,
+		guildId: params.guild.id,
+		channelId: params.channel.id,
 		userId: botUserId(),
 		username: client.user?.displayName ?? "bot",
 		content,
@@ -128,18 +144,55 @@ const replyToMessage: ToolHandler = async (args, ctx) => {
 	});
 	const result = "Reply sent";
 	return ok(lengthWarning ? `${result}\n${lengthWarning}` : result);
+}
+
+export interface AddReactionParams {
+	emoji: string;
+	triggerMessage: import("discord.js").Message;
+}
+
+export async function addReactionCore(
+	params: AddReactionParams,
+): Promise<ToolResult> {
+	try {
+		await params.triggerMessage.react(params.emoji);
+		return ok(`Reacted with ${params.emoji}`);
+	} catch {
+		return fail(`Failed to react with ${params.emoji}`);
+	}
+}
+
+// ── handlers ──
+
+const sendMessage: ToolHandler = async (args, ctx) => {
+	const rawContent = args.content as string;
+	if (!rawContent) return fail("content is required");
+	return sendMessageCore({
+		content: rawContent,
+		channel: ctx.channel,
+		guild: ctx.guild,
+		channelId: args.channel_id as string | undefined,
+		isCronTrigger: ctx.triggeredBy === "cron",
+	});
+};
+
+const replyToMessage: ToolHandler = async (args, ctx) => {
+	const rawContent = args.content as string;
+	if (!rawContent) return fail("content is required");
+	if (!ctx.triggerMessage) return fail("No trigger message to reply to");
+	return replyToMessageCore({
+		content: rawContent,
+		triggerMessage: ctx.triggerMessage,
+		guild: ctx.guild,
+		channel: ctx.channel,
+	});
 };
 
 const addReaction: ToolHandler = async (args, ctx) => {
 	const emoji = args.emoji as string;
 	if (!emoji) return fail("emoji is required");
 	if (!ctx.triggerMessage) return fail("No trigger message to react to");
-	try {
-		await ctx.triggerMessage.react(emoji);
-		return ok(`Reacted with ${emoji}`);
-	} catch {
-		return fail(`Failed to react with ${emoji}`);
-	}
+	return addReactionCore({ emoji, triggerMessage: ctx.triggerMessage });
 };
 
 const editMessage: ToolHandler = async (args, ctx) => {

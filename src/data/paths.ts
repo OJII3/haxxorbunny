@@ -50,3 +50,7 @@ export function avatarManifestPath(): string {
 export function avatarStatePath(): string {
 	return join(DATA_DIR, "avatar-state.json");
 }
+
+export function thoughtBufferPath(): string {
+	return join(DATA_DIR, "thought-buffer.json");
+}

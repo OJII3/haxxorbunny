@@ -10,9 +10,9 @@ import {
 	VoiceConnectionStatus,
 } from "@discordjs/voice";
 import type { Guild, TextBasedChannel, VoiceBasedChannel } from "discord.js";
-import { runAgentLoop } from "../agent/loop.ts";
-import type { AgentContext, VoiceContext } from "../agent/types.ts";
+import type { VoiceContext } from "../agent/types.ts";
 import { config } from "../config.ts";
+import { runVoiceFlow } from "../pipeline/voice-flow.ts";
 import { type SpeechSegment, VoiceReceiverHandler } from "./receiver.ts";
 import { speechToText } from "./stt.ts";
 import { textToSpeech } from "./tts.ts";
@@ -242,16 +242,18 @@ export class VoiceSession {
 
 			console.log(`[voice/session] ${displayName}: "${text}"`);
 
-			// エージェントループを voice モードで起動
-			const agentCtx: AgentContext = {
-				channel: this.textChannel,
-				guild: this.guild,
-				triggeredBy: "voice",
-				isMentioned: true, // voice は常に直接対話
-				voiceContext: this.buildVoiceContext(),
-			};
+			// voice パイプラインで応答を生成
+			const voiceCtx = this.buildVoiceContext();
+			const replyText = await runVoiceFlow(
+				voiceCtx,
+				this.guild,
+				this.textChannel,
+			);
 
-			await runAgentLoop(agentCtx);
+			// TTS で再生
+			if (replyText) {
+				await this.speak(replyText);
+			}
 		} catch (error) {
 			console.error("[voice/session] Speech processing error:", error);
 		} finally {

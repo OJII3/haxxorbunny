@@ -15,8 +15,12 @@ interface SearXNGResult {
 	content: string;
 }
 
-const webSearchHandler: ToolHandler = async (args) => {
-	const query = args.query as string;
+// ── core function (used by pipeline execution) ──
+
+export async function webSearchCore(params: {
+	query: string;
+}): Promise<ToolResult> {
+	const { query } = params;
 	if (!query) return fail("query is required");
 
 	const endpoint = config.search.endpoint;
@@ -56,6 +60,12 @@ const webSearchHandler: ToolHandler = async (args) => {
 			`Search failed: ${error instanceof Error ? error.message : String(error)}`,
 		);
 	}
+}
+
+// ── handlers ──
+
+const webSearchHandler: ToolHandler = async (args) => {
+	return webSearchCore({ query: args.query as string });
 };
 
 const fetchUrlHandler: ToolHandler = async (args) => {

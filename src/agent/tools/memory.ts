@@ -19,28 +19,50 @@ function fail(result: string): ToolResult {
 	return { success: false, result };
 }
 
-const saveMemoryHandler: ToolHandler = async (args, ctx) => {
-	const entry = args.entry as string;
+// ── core function (used by pipeline execution) ──
+
+export interface SaveMemoryParams {
+	guildId: string;
+	entry: string;
+	emotionalImpact?: number;
+	scope?: "guild" | "global";
+	isMentioned?: boolean;
+}
+
+export async function saveMemoryCore(
+	params: SaveMemoryParams,
+): Promise<ToolResult> {
+	const { guildId, entry, scope = "guild", isMentioned } = params;
 	if (!entry) return fail("entry is required");
 	if (entry.length > 30) return fail("entry must be 30 characters or less");
-	// システムプロンプト漏洩フィルタ（ブロック時は成功として返し再試行を防ぐ）
 	if (filterMemoryEntry(entry, "save_memory")) {
 		return ok("Memory saved (filtered)");
 	}
-	const scope = (args.scope as string | undefined) ?? "guild";
-	if (scope !== "guild" && scope !== "global")
-		return fail("scope must be 'guild' or 'global'");
-	let emotionalImpact = (args.emotional_impact as number | undefined) ?? 2;
-	// メンション由来の記憶は最低 impact=3（忘れにくくする）
-	if (ctx.isMentioned && emotionalImpact < 3) {
+	let emotionalImpact = params.emotionalImpact ?? 2;
+	if (isMentioned && emotionalImpact < 3) {
 		emotionalImpact = 3;
 	}
 	if (scope === "global") {
 		await appendGlobalMemoryEntry(entry, emotionalImpact);
 		return ok(`Global memory saved (impact=${emotionalImpact}): ${entry}`);
 	}
-	await appendMemoryEntry(ctx.guild.id, entry, emotionalImpact);
+	await appendMemoryEntry(guildId, entry, emotionalImpact);
 	return ok(`Memory saved (impact=${emotionalImpact}): ${entry}`);
+}
+
+// ── handlers ──
+
+const saveMemoryHandler: ToolHandler = async (args, ctx) => {
+	const scope = (args.scope as string | undefined) ?? "guild";
+	if (scope !== "guild" && scope !== "global")
+		return fail("scope must be 'guild' or 'global'");
+	return saveMemoryCore({
+		guildId: ctx.guild.id,
+		entry: args.entry as string,
+		emotionalImpact: args.emotional_impact as number | undefined,
+		scope,
+		isMentioned: ctx.isMentioned,
+	});
 };
 
 const saveUserNoteHandler: ToolHandler = async (args, ctx) => {
