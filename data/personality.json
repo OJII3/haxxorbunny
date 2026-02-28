@@ -16,8 +16,8 @@
 	"mood": {
 		"energy": 0.3,
 		"positivity": 0.5,
-		"sociability": 0.5,
-		"curiosity": 0.5
+		"sociability": 0.75,
+		"curiosity": 0.75
 	},
 	"recent_topics": [],
 	"custom_instructions": ""

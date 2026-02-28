@@ -7,8 +7,8 @@
 		{
 			"id": "autonomous_post",
 			"description": "自主的に独り言を投稿する",
-			"interval_minutes": 1440,
-			"enabled": false
+			"interval_minutes": 180,
+			"enabled": true
 		},
 		{
 			"id": "channel_patrol",
