@@ -4,10 +4,11 @@ import type {
 	PartialUser,
 	User,
 } from "discord.js";
-import { isAgentBusyForGuild, runAgentLoop } from "../../agent/loop.ts";
-import type { AgentContext } from "../../agent/types.ts";
+import { isAgentBusyForGuild } from "../../agent/loop.ts";
 import { client } from "../../client.ts";
+import { saveBotAction } from "../../db/queries.ts";
 import { loadPersonality } from "../../llm/prompts/personality.ts";
+import { isPipelineBusy } from "../../pipeline/message-flow.ts";
 
 /** 同一メッセージ+同一ユーザーへの連続反応を防ぐクールダウン (30秒) */
 const COOLDOWN_MS = 30_000;
@@ -51,8 +52,8 @@ export async function handleMessageReactionAdd(
 	const guild = reaction.message.guild;
 	if (!guild) return;
 
-	// エージェントがビジーなら無視
-	if (isAgentBusyForGuild(guild.id)) return;
+	// busy チェック
+	if (isAgentBusyForGuild(guild.id) || isPipelineBusy(guild.id)) return;
 
 	// mood.sociability が低い場合はスキップ
 	const personality = loadPersonality();
@@ -110,21 +111,18 @@ export async function handleMessageReactionAdd(
 		`[reaction] ${reactorName} reacted with ${emoji} to bot message in #${(reaction.message.channel as { name?: string }).name ?? "unknown"}`,
 	);
 
-	const agentCtx: AgentContext = {
-		triggerMessage: reaction.message.partial ? undefined : reaction.message,
-		channel: reaction.message.channel,
-		guild,
-		triggeredBy: "reaction",
-		reactionContext: {
-			userName: reactorName,
-			emoji,
-			messageContent,
-		},
-	};
+	const guildId = guild.id;
+	const channelId = reaction.message.channel.id;
 
-	try {
-		await runAgentLoop(agentCtx);
-	} catch (error) {
-		console.error("[reaction] Agent loop error:", error);
-	}
+	// リアクションへの反応は簡易ログのみ
+	saveBotAction({
+		guildId,
+		action: `pipeline:reaction_received:${emoji}`,
+		channelId,
+		content: messageContent.slice(0, 100),
+		reasoning: `${reactorName} reacted with ${emoji}`,
+		triggeredBy: "reaction",
+	});
+
+	console.log(`[reaction] Logged reaction from ${reactorName}: ${emoji}`);
 }

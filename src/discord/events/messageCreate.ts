@@ -1,11 +1,5 @@
 import { ChannelType, type GuildMember, type Message } from "discord.js";
-import {
-	IMAGE_CONTENT_TYPES,
-	MAX_IMAGES_PER_MESSAGE,
-	markActivity,
-	runAgentLoop,
-} from "../../agent/loop.ts";
-import type { AgentContext } from "../../agent/types.ts";
+import { markActivity } from "../../agent/loop.ts";
 import { client } from "../../client.ts";
 import { getRecentMessages, saveMessage } from "../../db/queries.ts";
 import {
@@ -13,11 +7,9 @@ import {
 	shouldRespondToBots,
 } from "../../llm/channel-category.ts";
 import { bufferMessage, setFlushHandler } from "../../llm/message-buffer.ts";
-import { loadPersonality } from "../../llm/prompts/personality.ts";
-import { reflect } from "../../llm/reflection.ts";
-import { triage } from "../../llm/triage.ts";
 import { shouldSkipTriage } from "../../llm/triage-throttle.ts";
-import { formatJSTShort } from "../../utils/time.ts";
+import { runMessageFlow } from "../../pipeline/message-flow.ts";
+import { appendImageInfo } from "../../pipeline/perception.ts";
 import { voiceManager } from "../../voice/manager.ts";
 
 async function isReplyToBotMessage(message: Message): Promise<boolean> {
@@ -86,7 +78,6 @@ async function handleVoiceJoinRequest(message: Message): Promise<boolean> {
 	const member = message.member as GuildMember | null;
 	if (!member) return false;
 
-	// メンバーが VC にいるか確認
 	const voiceChannel = member.voice.channel;
 	if (!voiceChannel) {
 		if (message.channel.isSendable()) {
@@ -95,7 +86,6 @@ async function handleVoiceJoinRequest(message: Message): Promise<boolean> {
 		return true;
 	}
 
-	// 既にセッションがある場合
 	if (voiceManager.hasActiveSession(guild.id)) {
 		if (message.channel.isSendable()) {
 			await message.reply("もう通話中だよ！");
@@ -103,7 +93,6 @@ async function handleVoiceJoinRequest(message: Message): Promise<boolean> {
 		return true;
 	}
 
-	// テキストチャンネルを取得
 	const textChannel =
 		message.channel.type === ChannelType.GuildText ||
 		message.channel.type === ChannelType.GuildVoice
@@ -126,14 +115,17 @@ async function handleVoiceJoinRequest(message: Message): Promise<boolean> {
 	return true;
 }
 
-function buildConversationContext(channelId: string): string {
-	const messages = getRecentMessages(channelId, 10);
-	return messages
-		.map((m) => {
-			const time = m.createdAt ? formatJSTShort(new Date(m.createdAt)) : "?";
-			return `[${time} ${m.username}]: ${m.content}`;
-		})
-		.join("\n");
+/** bot 連続発言の上限（無限ループ防止） */
+const BOT_CHAIN_LIMIT = 3;
+
+function isBotLoopDetected(channelId: string): boolean {
+	const recent = getRecentMessages(channelId, BOT_CHAIN_LIMIT + 1);
+	let botChain = 0;
+	for (let i = recent.length - 1; i >= 0; i--) {
+		if (recent[i]?.isBot) botChain++;
+		else break;
+	}
+	return botChain >= BOT_CHAIN_LIMIT;
 }
 
 async function processBufferedMessages(
@@ -151,11 +143,6 @@ async function processBufferedMessages(
 	const channelId = lastMessage.channelId;
 	const authorName = lastMessage.author.displayName;
 
-	// 結合コンテンツ（複数メッセージを改行で結合、画像情報をテキスト追記）
-	const combinedContent = messages
-		.map((m) => appendImageInfo(m.content, m))
-		.join("\n");
-
 	console.log(
 		`[buffer] flushing ${messages.length} message(s) from ${authorName} in ${channelId}`,
 	);
@@ -166,74 +153,10 @@ async function processBufferedMessages(
 	}
 
 	try {
-		const personality = loadPersonality();
-		const chName =
-			"name" in lastMessage.channel
-				? (lastMessage.channel.name as string)
-				: channelId;
-		const triageResult = await triage(
-			channelId,
-			chName,
-			combinedContent,
-			authorName,
-			hasMention,
-			personality.mood,
-			{ guildId },
-		);
-
-		console.log(
-			`[triage] ${triageResult.action} (${triageResult.confidence}) | reason: ${triageResult.reasoning}`,
-		);
-
-		switch (triageResult.action) {
-			case "ignore": {
-				const ctx = buildConversationContext(channelId);
-				reflect(
-					guildId,
-					channelId,
-					combinedContent,
-					authorName,
-					"ignore",
-					ctx,
-				).catch((e) => console.error("[reflection] fire-and-forget error:", e));
-				break;
-			}
-
-			case "react": {
-				const guild = lastMessage.guild;
-				if (!guild) break;
-				const agentCtx: AgentContext = {
-					triggerMessage: lastMessage,
-					channel: lastMessage.channel,
-					guild,
-					triggeredBy: "triage-react",
-					isMentioned: hasMention,
-					triageReactContext: {
-						reasoning: triageResult.reasoning,
-						confidence: triageResult.confidence,
-					},
-				};
-				await runAgentLoop(agentCtx);
-				break;
-			}
-
-			case "engage": {
-				const guild = lastMessage.guild;
-				if (!guild) break;
-
-				const agentCtx: AgentContext = {
-					triggerMessage: lastMessage,
-					channel: lastMessage.channel,
-					guild,
-					triggeredBy: "triage",
-					isMentioned: hasMention,
-				};
-				await runAgentLoop(agentCtx);
-				break;
-			}
-		}
+		// パイプラインに移行
+		await runMessageFlow(messages, hasMention);
 	} catch (error) {
-		console.error("[messageCreate] Triage handler error:", error);
+		console.error("[messageCreate] Pipeline error:", error);
 	}
 }
 
@@ -243,30 +166,6 @@ setFlushHandler((messages, hasMention) => {
 		console.error("[messageCreate] processBufferedMessages error:", e),
 	);
 });
-
-/** 画像 attachment の情報をテキストとして追記する（LLM に渡す画像と同じフィルタ・上限を使用） */
-function appendImageInfo(content: string, message: Message): string {
-	const imageAttachments = [...message.attachments.values()]
-		.filter((a) => a.contentType && IMAGE_CONTENT_TYPES.has(a.contentType))
-		.slice(0, MAX_IMAGES_PER_MESSAGE);
-	if (imageAttachments.length === 0) return content;
-	const tags = imageAttachments.map((a) => `[画像: ${a.name}]`).join(" ");
-	return content ? `${content} ${tags}` : tags;
-}
-
-/** bot 連続発言の上限（無限ループ防止） */
-const BOT_CHAIN_LIMIT = 3;
-
-function isBotLoopDetected(channelId: string): boolean {
-	const recent = getRecentMessages(channelId, BOT_CHAIN_LIMIT + 1);
-	// 直近の連続 bot メッセージ数をカウント（新しい方から）
-	let botChain = 0;
-	for (let i = recent.length - 1; i >= 0; i--) {
-		if (recent[i]?.isBot) botChain++;
-		else break;
-	}
-	return botChain >= BOT_CHAIN_LIMIT;
-}
 
 export async function handleMessageCreate(message: Message): Promise<void> {
 	// Bot のメッセージ: DB 保存 + bot-chat カテゴリなら処理続行

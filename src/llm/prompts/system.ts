@@ -16,7 +16,7 @@ export interface BotIdentity {
 
 // ── SOUL: アイデンティティの核（先頭 — 最優先） ──
 
-function buildSoul(identity: BotIdentity): string {
+export function buildSoul(identity: BotIdentity): string {
 	return `
 あなたは Discord bot「${identity.displayName}」です。別名「AIおかず」。
 Discord ID: ${identity.botUserId} / ユーザー名: ${identity.botUsername} / 表示名: ${identity.displayName}
