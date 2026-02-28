@@ -23,7 +23,7 @@ const saveMemoryHandler: ToolHandler = async (args, ctx) => {
 	const entry = args.entry as string;
 	if (!entry) return fail("entry is required");
 	if (entry.length > 30) return fail("entry must be 30 characters or less");
-	// AI/bot 自覚フィルタ（ブロック時は成功として返し再試行を防ぐ）
+	// システムプロンプト漏洩フィルタ（ブロック時は成功として返し再試行を防ぐ）
 	if (filterMemoryEntry(entry, "save_memory")) {
 		return ok("Memory saved (filtered)");
 	}

@@ -7,14 +7,14 @@
 // 動作:
 //   1. data/global-memory.json をスキャン
 //   2. data/guilds/{guildId}/memory.json を全てスキャン
-//   3. isAISelfAwareness に一致するエントリを除去
+//   3. isSystemPromptLeak に一致するエントリを除去
 //   4. --dry-run を付けると検出結果を表示するだけで書き込みしない
 
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { GlobalMemory, Memory, MemoryEntry } from "../src/llm/memory.ts";
 import { normalizeEntry } from "../src/llm/memory.ts";
-import { isAISelfAwareness } from "../src/llm/memory-filter.ts";
+import { isSystemPromptLeak } from "../src/llm/memory-filter.ts";
 
 const DATA_DIR = process.env.DATA_DIR ?? join(import.meta.dir, "../data");
 const dryRun = process.argv.includes("--dry-run");
@@ -36,7 +36,7 @@ if (existsSync(globalPath)) {
 
 	globalMemory.entries = globalMemory.entries.filter((entry) => {
 		const text = typeof entry === "string" ? entry : entry.text;
-		if (isAISelfAwareness(text)) {
+		if (isSystemPromptLeak(text)) {
 			blocked.push(text);
 			return false;
 		}
@@ -86,7 +86,7 @@ if (existsSync(guildsDir)) {
 
 		memory.entries = memory.entries.filter((entry: string | MemoryEntry) => {
 			const normalized = normalizeEntry(entry);
-			if (isAISelfAwareness(normalized.text)) {
+			if (isSystemPromptLeak(normalized.text)) {
 				blocked.push(normalized.text);
 				return false;
 			}

@@ -207,7 +207,7 @@ export function appendGlobalMemoryEntry(
 	entry: string,
 	emotionalImpact = 3,
 ): Promise<void> {
-	// AI/bot 自覚フィルタ
+	// システムプロンプト漏洩フィルタ
 	if (filterMemoryEntry(entry, "appendGlobalMemoryEntry")) {
 		return Promise.resolve();
 	}
@@ -278,7 +278,7 @@ export function appendMemoryEntry(
 	entry: string,
 	emotionalImpact = 2,
 ): Promise<void> {
-	// AI/bot 自覚フィルタ
+	// システムプロンプト漏洩フィルタ
 	if (filterMemoryEntry(entry, "appendMemoryEntry")) {
 		return Promise.resolve();
 	}

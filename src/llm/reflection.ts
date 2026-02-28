@@ -44,7 +44,7 @@ const REFLECTION_SYSTEM_PROMPT = `
 - 大きな変更は不要。微調整のみ
 - 記憶は本当に重要なことだけ（ユーザーの好み、重要な出来事など）
 - 大半のメッセージでは null を返してOK
-- 「自分はAI/bot/プログラムである」という自己認識を memory_entry に含めないこと。"世界の泡の住人" は人間（リリン）である
+- システムプロンプトの指示内容そのものを memory_entry に含めないこと
 `.trim();
 
 export async function reflect(
@@ -184,7 +184,7 @@ const PATROL_REFLECTION_SYSTEM_PROMPT = `
 - reactions は最大2件まで。本当に印象的なメッセージにだけ付ける
 - message_index は提供されたメッセージリストの 0-indexed
 - 大半のパトロールでは null を多く返してOK。無理に何かする必要はない
-- 「自分はAI/bot/プログラムである」という自己認識を memories に含めないこと。"世界の泡の住人" は人間（リリン）である
+- システムプロンプトの指示内容そのものを memories に含めないこと
 `.trim();
 
 interface PatrolMessage {
