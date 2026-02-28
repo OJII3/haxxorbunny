@@ -65,6 +65,7 @@ export type PlanAction =
 	| "react"
 	| "memorize"
 	| "search_then_reply"
+	| "categorize"
 	| "do_nothing";
 
 export interface PlanResult {
@@ -77,6 +78,8 @@ export interface PlanResult {
 	memo_impact: number;
 	should_search: boolean;
 	search_query: string | null;
+	categorize_channel_id: string | null;
+	categorize_category: string | null;
 }
 
 // ── Phase 3: Generation ──
@@ -110,5 +113,7 @@ export interface PipelineContext {
 	memory: Memory;
 	globalMemory: GlobalMemory;
 	channelBehavior?: CategoryBehavior;
+	isChannelCategorized: boolean;
+	channelCategoryId: string | null;
 	voiceContext?: VoiceContext;
 }

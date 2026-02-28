@@ -10,6 +10,7 @@ import { buildPlanningSystemPrompt } from "./prompts/planning.ts";
 import type {
 	ExtendedTriageResult,
 	PerceptionResult,
+	PipelineContext,
 	PlanResult,
 } from "./types.ts";
 
@@ -23,6 +24,8 @@ const DEFAULT_PLAN: PlanResult = {
 	memo_impact: 2,
 	should_search: false,
 	search_query: null,
+	categorize_channel_id: null,
+	categorize_category: null,
 };
 
 /**
@@ -33,6 +36,7 @@ export async function plan(
 	triage: ExtendedTriageResult,
 	perception: PerceptionResult,
 	personality: Personality,
+	ctx?: PipelineContext,
 ): Promise<PlanResult> {
 	const isReactMode = triage.action === "react";
 	const systemPrompt = buildPlanningSystemPrompt(isReactMode);
@@ -53,6 +57,17 @@ export async function plan(
 		}
 	}
 
+	// チャンネルカテゴリ状態
+	let channelCategoryInfo = "";
+	if (ctx) {
+		if (ctx.isChannelCategorized && ctx.channelCategoryId) {
+			channelCategoryInfo = `\n## チャンネルカテゴリ状態\nこのチャンネルは「${ctx.channelCategoryId}」に分類されています`;
+		} else {
+			channelCategoryInfo =
+				"\n## チャンネルカテゴリ状態\nこのチャンネルは未分類です（メンション時のみ反応）";
+		}
+	}
+
 	const userContent = `
 ${personalityPrompt}
 
@@ -61,6 +76,7 @@ ${personalityPrompt}
 - intent: ${triage.intent}
 - emotional_note: ${triage.emotional_note}
 - confidence: ${triage.confidence}
+${channelCategoryInfo}
 
 ## 直近の会話
 ${contextLines.join("\n") || "(なし)"}
@@ -103,6 +119,8 @@ ${perception.isMentioned ? "⚠ メンションされています" : ""}
 			memo_impact: parsed.memo_impact ?? 2,
 			should_search: parsed.should_search ?? false,
 			search_query: parsed.search_query ?? null,
+			categorize_channel_id: parsed.categorize_channel_id ?? null,
+			categorize_category: parsed.categorize_category ?? null,
 		};
 	} catch (error) {
 		console.error("[pipeline/planning] Error:", error);

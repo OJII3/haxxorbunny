@@ -7,6 +7,7 @@ import { saveMemoryCore } from "../agent/tools/memory.ts";
 import { webSearchCore } from "../agent/tools/web.ts";
 import type { ToolResult } from "../agent/types.ts";
 import { saveBotAction } from "../db/queries.ts";
+import { loadCategories, saveCategories } from "../llm/channel-category.ts";
 import { generate } from "./generation.ts";
 import type {
 	ExecutionLog,
@@ -158,6 +159,44 @@ export async function execute(
 						detail: sendResult.result,
 					});
 				}
+				break;
+			}
+
+			case "categorize": {
+				if (!planResult.categorize_category) {
+					log.actions.push({
+						type: "categorize",
+						success: false,
+						detail: "No category specified",
+					});
+					break;
+				}
+				const targetChannelId =
+					planResult.categorize_channel_id ?? ctx.channelId;
+				const data = loadCategories(ctx.guildId);
+				const targetCat = data.categories.find(
+					(c) => c.id === planResult.categorize_category,
+				);
+				if (!targetCat) {
+					log.actions.push({
+						type: "categorize",
+						success: false,
+						detail: `Category not found: ${planResult.categorize_category}`,
+					});
+					break;
+				}
+				// 他カテゴリから削除
+				for (const cat of data.categories) {
+					const idx = cat.channel_ids.indexOf(targetChannelId);
+					if (idx !== -1) cat.channel_ids.splice(idx, 1);
+				}
+				targetCat.channel_ids.push(targetChannelId);
+				saveCategories(ctx.guildId, data);
+				log.actions.push({
+					type: "categorize",
+					success: true,
+					detail: `Assigned ${targetChannelId} to ${planResult.categorize_category}`,
+				});
 				break;
 			}
 

@@ -20,7 +20,9 @@ JSON のみを返すこと。
   "memo": null,
   "memo_impact": 2,
   "should_search": false,
-  "search_query": null
+  "search_query": null,
+  "categorize_channel_id": null,
+  "categorize_category": null
 }
 
 注意:
@@ -39,6 +41,12 @@ JSON のみを返すこと。
 - react: リアクション絵文字を付ける
 - memorize: 記憶に保存する
 - search_then_reply: Web検索してから返信する
+- categorize: チャンネルのカテゴリを変更する
+  - ユーザーが bot に対してチャンネルへの参加を許可・制限する意図を示した場合にのみ使う
+  - 例: 「ここで自由に話していいよ」→ categorize_category: "my-space"
+  - 例: 「このチャンネルは見てるだけにして」→ categorize_category: "observe-only"
+  - 例: 「#random でも話していいよ」→ categorize_category: "my-space" (categorize_channel_id にそのチャンネルIDを指定)
+  - ユーザーがただ会話しているだけの場合は使わない
 - do_nothing: やっぱり何もしない
 
 ## 応答フォーマット
@@ -52,7 +60,9 @@ JSON のみを返すこと。
   "memo": null,
   "memo_impact": 2,
   "should_search": false,
-  "search_query": null
+  "search_query": null,
+  "categorize_channel_id": null,
+  "categorize_category": null
 }
 
 注意:
@@ -63,6 +73,8 @@ JSON のみを返すこと。
 - memo は30字以内。記憶する場合のみ
 - memo_impact は 1-5（1=些細, 5=非常に印象的）
 - search_query は検索する場合のクエリ
+- categorize_channel_id は対象チャンネルID。null の場合は現在のチャンネル
+- categorize_category は "my-space" | "observe-only" | "bot-chat" のいずれか
 - 自分のキャラ（カジュアルだが丁寧さもある、ゆるい感じ）を忘れずに計画を立てる
 - reply_approach には具体的な内容や方向性を書く。「適当に返す」のような曖昧な指示は避ける
 `.trim();
