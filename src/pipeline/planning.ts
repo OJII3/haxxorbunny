@@ -5,6 +5,7 @@ import {
 	personalityToPrompt,
 } from "../llm/prompts/personality.ts";
 import { triageLlm } from "../llm/triage-client.ts";
+import { parseLlmJson } from "../utils/parse-llm-json.ts";
 import { buildPlanningSystemPrompt } from "./prompts/planning.ts";
 import type {
 	ExtendedTriageResult,
@@ -15,7 +16,7 @@ import type {
 const DEFAULT_PLAN: PlanResult = {
 	actions: ["do_nothing"],
 	reply_approach: null,
-	reply_as_normal: false,
+	reply_as_normal: true,
 	react_emoji: null,
 	should_memorize: false,
 	memo: null,
@@ -86,21 +87,16 @@ ${perception.isMentioned ? "⚠ メンションされています" : ""}
 			return DEFAULT_PLAN;
 		}
 
-		const cleaned = raw
-			.replace(/^```(?:json)?\s*\n?/i, "")
-			.replace(/\n?```\s*$/i, "");
-		const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-		if (!jsonMatch) {
+		const parsed = parseLlmJson<Partial<PlanResult>>(raw);
+		if (!parsed) {
 			console.warn("[pipeline/planning] No valid JSON in response:", raw);
 			return DEFAULT_PLAN;
 		}
 
-		const parsed = JSON.parse(jsonMatch[0]) as Partial<PlanResult>;
-
 		return {
 			actions: parsed.actions ?? ["do_nothing"],
 			reply_approach: parsed.reply_approach ?? null,
-			reply_as_normal: parsed.reply_as_normal ?? false,
+			reply_as_normal: parsed.reply_as_normal ?? true,
 			react_emoji: parsed.react_emoji ?? null,
 			should_memorize: parsed.should_memorize ?? false,
 			memo: parsed.memo ?? null,

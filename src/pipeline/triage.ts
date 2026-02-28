@@ -3,6 +3,7 @@ import { getLastBotAction, getRecentMessages } from "../db/queries.ts";
 import { getChannelBehavior } from "../llm/channel-category.ts";
 import type { MoodState } from "../llm/prompts/personality.ts";
 import { triageLlm } from "../llm/triage-client.ts";
+import { parseLlmJson } from "../utils/parse-llm-json.ts";
 import { formatJSTFull, formatJSTShort } from "../utils/time.ts";
 import { buildExtendedTriageSystemPrompt } from "./prompts/triage.ts";
 import type { ExtendedTriageResult, PerceptionResult } from "./types.ts";
@@ -96,43 +97,6 @@ ${lastAction ? `${timeSinceLastAction} — action: ${lastAction.action}, content
 }
 
 /**
- * LLM レスポンスから JSON をパースする。不完全な JSON は末尾に } を補完して再試行する。
- */
-function parseTriageJson(raw: string): Partial<ExtendedTriageResult> | null {
-	const cleaned = raw
-		.replace(/^```(?:json)?\s*\n?/i, "")
-		.replace(/\n?```\s*$/i, "");
-	const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-	if (jsonMatch) {
-		try {
-			return JSON.parse(jsonMatch[0]) as Partial<ExtendedTriageResult>;
-		} catch {
-			// パース失敗 — 下で補完を試みる
-		}
-	}
-
-	// 不完全な JSON を補完して再試行（末尾の } が欠けているケース）
-	const braceMatch = cleaned.match(/\{[\s\S]*/);
-	if (braceMatch) {
-		const partial = braceMatch[0];
-		// 文字列が閉じていない場合は閉じてから } を追加
-		const openQuotes = (partial.match(/(?<!\\)"/g) || []).length;
-		let repaired = partial;
-		if (openQuotes % 2 !== 0) {
-			repaired += '"';
-		}
-		repaired += "}";
-		try {
-			return JSON.parse(repaired) as Partial<ExtendedTriageResult>;
-		} catch {
-			// 補完でも失敗
-		}
-	}
-
-	return null;
-}
-
-/**
  * Triage LLM を呼び出し、JSON パース失敗時は1回リトライする。
  */
 async function callTriageWithRetry(
@@ -155,7 +119,7 @@ async function callTriageWithRetry(
 			continue;
 		}
 
-		const parsed = parseTriageJson(raw);
+		const parsed = parseLlmJson<Partial<ExtendedTriageResult>>(raw);
 		if (parsed) {
 			return parsed;
 		}

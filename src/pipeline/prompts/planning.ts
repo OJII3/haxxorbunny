@@ -14,6 +14,7 @@ JSON のみを返すこと。
 {
   "actions": ["react"],
   "reply_approach": null,
+  "reply_as_normal": false,
   "react_emoji": "👍",
   "should_memorize": false,
   "memo": null,
