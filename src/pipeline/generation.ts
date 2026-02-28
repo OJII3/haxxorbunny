@@ -114,7 +114,7 @@ export async function generate(
 			return { text: "うーん" };
 		}
 
-		const text = stripConversationPrefix(stripMarkdown(rawText));
+		const text = stripMarkdown(stripConversationPrefix(rawText)) || "うーん";
 		return { text };
 	} catch (error) {
 		console.error("[pipeline/generation] Error:", error);
@@ -123,8 +123,8 @@ export async function generate(
 }
 
 /** LLM 出力から会話履歴プレフィックス「[MM/DD HH:MM 名前]:」を除去する */
-function stripConversationPrefix(text: string): string {
-	return text.replace(/^\[[\d/]+ [\d:]+ [^\]]*\]:?\s*/g, "");
+export function stripConversationPrefix(text: string): string {
+	return text.replace(/^\[\d{2}\/\d{2} \d{2}:\d{2} [^\]]*\]:?\s*/gm, "");
 }
 
 /** depth injection: 会話メッセージが6件以上ある場合、最新4メッセージ手前にリマインダーを挿入 */
