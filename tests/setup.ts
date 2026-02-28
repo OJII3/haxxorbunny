@@ -10,7 +10,7 @@ process.env.DISCORD_APP_ID ??= "test-app-id-dummy";
 process.env.DB_PATH = ":memory:";
 
 // テスト用データディレクトリ: OS tmpdir 配下に一時ディレクトリを作成
-const testDataDir = mkdtempSync(join(tmpdir(), "haxxorbunny-test-"));
+const testDataDir = mkdtempSync(join(tmpdir(), "bot-sekai-test-"));
 process.env.DATA_DIR = testDataDir;
 
 // テスト終了後に一時ディレクトリを削除

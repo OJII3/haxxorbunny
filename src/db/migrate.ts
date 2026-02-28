@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { join } from "node:path";
 
-const DB_PATH = join(import.meta.dir, "../../data/haxxorbunny.db");
+const DB_PATH = join(import.meta.dir, "../../data/bot-sekai.db");
 
 export function runMigrations() {
 	const sqlite = new Database(DB_PATH, { create: true });

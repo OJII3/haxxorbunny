@@ -21,7 +21,7 @@ podman-compose down
 podman-compose down && podman-compose up --build -d
 
 # ログ確認
-podman logs haxxorbunny          # bot
+podman logs bot-sekai          # bot
 
 # ステータス確認
 podman-compose ps
@@ -31,10 +31,10 @@ podman-compose ps
 
 | サービス | コンテナ名 | 説明 |
 |---------|-----------|------|
-| bot | haxxorbunny | Discord bot 本体 (Bun) |
-| searxng | haxxorbunny-searxng | Web検索エンジン (SearXNG) |
-| voicevox | haxxorbunny-voicevox | TTS Engine (VOICEVOX, CPU) |
-| moonshine | haxxorbunny-moonshine | STT Server (Moonshine ASR, moonshine-tiny-ja) |
+| bot | bot-sekai | Discord bot 本体 (Bun) |
+| searxng | bot-sekai-searxng | Web検索エンジン (SearXNG) |
+| voicevox | bot-sekai-voicevox | TTS Engine (VOICEVOX, CPU) |
+| moonshine | bot-sekai-moonshine | STT Server (Moonshine ASR, moonshine-tiny-ja) |
 
 ## データ永続化
 

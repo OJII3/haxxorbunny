@@ -142,12 +142,9 @@ describe("parseAllJsonObjects", () => {
 	});
 
 	test("ログで観測された実パターンを処理する", () => {
-		const raw = '{"emoji":"👀"}{"content":"ぼくはhaxxorbunny。"}';
+		const raw = '{"emoji":"👀"}{"content":"ぼくはbot-sekai。"}';
 		const result = parseAllJsonObjects(raw);
-		expect(result).toEqual([
-			{ emoji: "👀" },
-			{ content: "ぼくはhaxxorbunny。" },
-		]);
+		expect(result).toEqual([{ emoji: "👀" }, { content: "ぼくはbot-sekai。" }]);
 	});
 });
 

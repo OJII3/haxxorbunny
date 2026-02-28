@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Containerfile
-    container_name: haxxorbunny
+    container_name: bot-sekai
     env_file: .env
     volumes:
       - bot-data:/app/data
@@ -11,7 +11,7 @@ services:
 
   searxng:
     image: searxng/searxng:latest
-    container_name: haxxorbunny-searxng
+    container_name: bot-sekai-searxng
     environment:
       - SEARXNG_BASE_URL=http://searxng:8080/
       - SEARXNG_SECRET=${SEARXNG_SECRET}
@@ -21,7 +21,7 @@ services:
 
   voicevox:
     image: voicevox/voicevox_engine:cpu-latest
-    container_name: haxxorbunny-voicevox
+    container_name: bot-sekai-voicevox
     ports:
       - "50021:50021"
     restart: unless-stopped
@@ -30,7 +30,7 @@ services:
     build:
       context: ./moonshine
       dockerfile: Containerfile
-    container_name: haxxorbunny-moonshine
+    container_name: bot-sekai-moonshine
     ports:
       - "8090:8090"
     volumes:
