@@ -129,7 +129,7 @@ ${longTermList}
 
 		// 長期記憶に昇格 (MemoryEntry 形式で保存)
 		for (const entry of result.promote_to_long_term) {
-			// AI/bot 自覚フィルタ
+			// システムプロンプト漏洩フィルタ
 			if (filterMemoryEntry(entry, "distill/promote_to_long_term")) continue;
 			const existingTexts = memory.entries.map((e) => normalizeEntry(e).text);
 			if (!existingTexts.includes(entry)) {

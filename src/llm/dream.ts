@@ -122,7 +122,7 @@ ${globalMemoryList}
 
 		// insights を [dream] タグ付きグローバル記憶として追加
 		for (const insight of result.insights.slice(0, 3)) {
-			// AI/bot 自覚フィルタ
+			// システムプロンプト漏洩フィルタ
 			if (filterMemoryEntry(insight, "dream/insight")) continue;
 			const dreamEntry = `[dream] ${insight}`;
 			if (dreamEntry.length <= 30) {
