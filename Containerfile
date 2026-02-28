@@ -12,11 +12,9 @@ RUN bun install --frozen-lockfile --production
 COPY src/ ./src/
 COPY tsconfig.json ./
 
-# Copy initial data files to a seed directory
+# Copy initial data files to a seed directory (if they exist)
 # (volume mount will override /app/data, so we seed on first run)
-COPY data/personality.json ./data-seed/personality.json
-COPY data/goals.json ./data-seed/goals.json
 COPY data/heartbeat.json ./data-seed/heartbeat.json
 
 # Entrypoint: seed missing data files, then start
-CMD ["sh", "-c", "for f in data-seed/*; do name=$(basename $f); [ ! -f data/$name ] && cp $f data/$name && echo \"[seed] Copied $name\"; done; bun run src/index.ts"]
+CMD ["sh", "-c", "mkdir -p data && for f in data-seed/*; do [ -f \"$f\" ] || continue; name=$(basename $f); [ ! -f data/$name ] && cp $f data/$name && echo \"[seed] Copied $name\"; done; bun run src/index.ts"]
