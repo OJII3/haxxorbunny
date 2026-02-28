@@ -22,7 +22,7 @@
 | `> 0.4` | 普通 | メンション・直接質問・混乱整理のみ | 発言するほどではないが何か感じた時 | 基本はこちら |
 | `≤ 0.4` | 控えめ | メンションのみに反応 | 非常に印象的な時だけまれに | 基本はこちら |
 
-**チャンネルカテゴリシステム:** チャンネルの役割をカテゴリで分類し、カテゴリごとに振る舞い（`avg_offset`, `allow_react`, `allow_unsolicited`, `respond_to_bots`, `custom_instructions`）を定義。プリセットカテゴリ: `my-space`（自分の居場所、自発的発言OK）、`observe-only`（観察のみ、リアクションのみ）、`bot-chat`（bot同士の会話）。未分類チャンネルでは全行動を控える（メンション時のみ反応）。メンション時はカテゴリをバイパス。`data/guilds/{guildId}/channel-categories.json` に保存。旧データ（home-channels.json, channel-policies.json）からの自動移行対応。
+**チャンネルカテゴリシステム:** チャンネルの役割をカテゴリで分類し、カテゴリごとに振る舞い（`avg_offset`, `allow_react`, `allow_unsolicited`, `respond_to_bots`, `custom_instructions`）を定義。プリセットカテゴリ: `my-space`（自分の居場所、自発的発言OK）、`observe-only`（観察のみ、リアクションのみ）、`bot-chat`（bot同士の会話）。未分類チャンネルでは全行動を控える（メンション時のみ反応）。メンション時はカテゴリをバイパス。`data/guilds/{guildId}/channel-categories.json` に保存。旧データ（home-channels.json, channel-policies.json）からの自動移行対応。**パイプライン統合:** メンション時にユーザーの意図（「ここで自由に話していいよ」等）を Planning フェーズが判断し、`categorize` アクションでチャンネルを自律的にカテゴライズする。
 
 ## イベントフロー（エージェントループ）
 

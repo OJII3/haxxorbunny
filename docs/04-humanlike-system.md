@@ -82,6 +82,8 @@ bot が不在のチャンネルを定期的にスキャン（上位3チャンネ
 
 チャンネルの役割をカテゴリで分類し、カテゴリごとに振る舞いを定義する統合管理システム。`list_categories` / `create_category` / `update_category` / `delete_category` / `assign_channel` / `unassign_channel` の6ツールで管理。プリセットカテゴリ: `my-space`（自分の居場所、avg_offset=+0.5、自発的発言OK）、`observe-only`（観察のみ、avg_offset=-0.8、リアクションのみ）、`bot-chat`（bot会話、avg_offset=+0.3、respond_to_bots=true）。未分類チャンネルでは全行動を控える（メンション時のみ反応）。カスタムカテゴリは最大5個、自然言語で振る舞いを記述すると triageLlm がパラメータ化。旧データ（home-channels.json→my-space、channel-policies.json→カスタムカテゴリ）からの自動移行対応。
 
+**パイプライン経由の自律カテゴライズ:** メンション時にユーザーがチャンネル参加許可の意図（「ここで自由に話していいよ」「このチャンネルは見てるだけにして」等）を示した場合、Planning フェーズが `categorize` アクションを選択し、Execution フェーズで `channel-categories.json` を更新する。Planning への入力にはチャンネルの現在のカテゴリ状態（未分類 / カテゴリ名）が含まれる。
+
 ### 自律的タスク管理
 
 bot が `list_tasks` / `update_task` / `create_task` / `delete_task` ツールで全定期タスクを自律的に管理可能。ビルトインタスク（autonomous_post, channel_patrol, goal_check, distill_memory, cleanup_old_memory, dream_processing）の有効/無効・間隔を変更でき、さらにカスタム定期タスク（最大5個）を自由に作成・編集・削除できる。カスタムタスクは指定したプロンプトに従ってエージェントループを定期実行する。HeartbeatTask に `type`（builtin/custom）、`prompt`（カスタムタスクの実行プロンプト）、`require_active_hours`（アクティブ時間帯限定、デフォルトtrue）フィールドを追加。
