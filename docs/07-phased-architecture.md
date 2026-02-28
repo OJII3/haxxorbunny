@@ -514,7 +514,7 @@ patrol cron → チャンネルスキャン → patrolReflect()
 - Phase 3-4: strategy 分岐実行
 - Phase 5: thought buffer 消化
 
-### Step 4: ゴール・パトロール統合
+### Step 4: ゴール・パトロール統合 ✅
 
 - goal_check cron の役割変更（直接行動 → thought buffer 蓄積）
 - patrol の出力に thought fragment 追加
