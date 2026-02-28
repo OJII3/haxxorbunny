@@ -15,6 +15,7 @@ import type {
 const DEFAULT_PLAN: PlanResult = {
 	actions: ["do_nothing"],
 	reply_approach: null,
+	reply_as_normal: false,
 	react_emoji: null,
 	should_memorize: false,
 	memo: null,
@@ -99,6 +100,7 @@ ${perception.isMentioned ? "⚠ メンションされています" : ""}
 		return {
 			actions: parsed.actions ?? ["do_nothing"],
 			reply_approach: parsed.reply_approach ?? null,
+			reply_as_normal: parsed.reply_as_normal ?? false,
 			react_emoji: parsed.react_emoji ?? null,
 			should_memorize: parsed.should_memorize ?? false,
 			memo: parsed.memo ?? null,

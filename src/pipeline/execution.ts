@@ -44,7 +44,7 @@ export async function execute(
 				}
 
 				let result: ToolResult;
-				if (perception.triggerMessage) {
+				if (perception.triggerMessage && !planResult.reply_as_normal) {
 					result = await replyToMessageCore({
 						content: generated.text,
 						triggerMessage: perception.triggerMessage,
@@ -138,7 +138,7 @@ export async function execute(
 					);
 					// 送信
 					let sendResult: ToolResult;
-					if (perception.triggerMessage) {
+					if (perception.triggerMessage && !planResult.reply_as_normal) {
 						sendResult = await replyToMessageCore({
 							content: searchGenerated.text,
 							triggerMessage: perception.triggerMessage,

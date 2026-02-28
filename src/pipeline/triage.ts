@@ -59,33 +59,13 @@ ${lastAction ? `${timeSinceLastAction} — action: ${lastAction.action}, content
 [${author}]: ${content}${mentionNote}
 `.trim();
 
+	const messages = [
+		{ role: "system" as const, content: systemPrompt },
+		{ role: "user" as const, content: context },
+	];
+
 	try {
-		const response = await triageLlm.chat.completions.create({
-			model: config.triage.model,
-			messages: [
-				{ role: "system", content: systemPrompt },
-				{ role: "user", content: context },
-			],
-			temperature: 0.3,
-			max_tokens: 1024,
-		});
-
-		const raw = response.choices[0]?.message?.content?.trim();
-		if (!raw) {
-			console.warn("[pipeline/triage] Empty response");
-			return defaultIgnore("Empty triage response");
-		}
-
-		const cleaned = raw
-			.replace(/^```(?:json)?\s*\n?/i, "")
-			.replace(/\n?```\s*$/i, "");
-		const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-		if (!jsonMatch) {
-			console.warn("[pipeline/triage] No valid JSON in response:", raw);
-			return defaultIgnore("No valid JSON in triage response");
-		}
-
-		const parsed = JSON.parse(jsonMatch[0]) as Partial<ExtendedTriageResult>;
+		const parsed = await callTriageWithRetry(messages);
 
 		// カテゴリベースの react ブロック判定
 		const allowReact = behavior ? behavior.allow_react : true;
@@ -113,6 +93,80 @@ ${lastAction ? `${timeSinceLastAction} — action: ${lastAction.action}, content
 		console.error("[pipeline/triage] Error:", error);
 		return defaultIgnore("Triage error");
 	}
+}
+
+/**
+ * LLM レスポンスから JSON をパースする。不完全な JSON は末尾に } を補完して再試行する。
+ */
+function parseTriageJson(raw: string): Partial<ExtendedTriageResult> | null {
+	const cleaned = raw
+		.replace(/^```(?:json)?\s*\n?/i, "")
+		.replace(/\n?```\s*$/i, "");
+	const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+	if (jsonMatch) {
+		try {
+			return JSON.parse(jsonMatch[0]) as Partial<ExtendedTriageResult>;
+		} catch {
+			// パース失敗 — 下で補完を試みる
+		}
+	}
+
+	// 不完全な JSON を補完して再試行（末尾の } が欠けているケース）
+	const braceMatch = cleaned.match(/\{[\s\S]*/);
+	if (braceMatch) {
+		const partial = braceMatch[0];
+		// 文字列が閉じていない場合は閉じてから } を追加
+		const openQuotes = (partial.match(/(?<!\\)"/g) || []).length;
+		let repaired = partial;
+		if (openQuotes % 2 !== 0) {
+			repaired += '"';
+		}
+		repaired += "}";
+		try {
+			return JSON.parse(repaired) as Partial<ExtendedTriageResult>;
+		} catch {
+			// 補完でも失敗
+		}
+	}
+
+	return null;
+}
+
+/**
+ * Triage LLM を呼び出し、JSON パース失敗時は1回リトライする。
+ */
+async function callTriageWithRetry(
+	messages: { role: "system" | "user"; content: string }[],
+): Promise<Partial<ExtendedTriageResult>> {
+	const maxAttempts = 2;
+	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+		const response = await triageLlm.chat.completions.create({
+			model: config.triage.model,
+			messages,
+			temperature: 0.3,
+			max_tokens: 1024,
+		});
+
+		const raw = response.choices[0]?.message?.content?.trim();
+		if (!raw) {
+			console.warn(
+				`[pipeline/triage] Empty response (attempt ${attempt}/${maxAttempts})`,
+			);
+			continue;
+		}
+
+		const parsed = parseTriageJson(raw);
+		if (parsed) {
+			return parsed;
+		}
+
+		console.warn(
+			`[pipeline/triage] No valid JSON (attempt ${attempt}/${maxAttempts}):`,
+			raw,
+		);
+	}
+
+	throw new Error("Triage JSON parse failed after retries");
 }
 
 function defaultIgnore(reasoning: string): ExtendedTriageResult {
