@@ -37,8 +37,13 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 # direnv
 .direnv
 
-# data (DB is local-only)
+# data (runtime)
 data/*.db
 data/*.db-journal
 data/memory/
 data/avatar-state.json
+data/personality.json
+data/memory.json
+data/goals.json
+data/global-memory.json
+data/guilds/
