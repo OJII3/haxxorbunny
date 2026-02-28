@@ -31,9 +31,10 @@ const FALLBACK_PHRASES = [
 
 /** give_up 時のフォールバックフレーズをランダム選択 */
 function pickFallbackPhrase(): string {
-	return FALLBACK_PHRASES[
-		Math.floor(Math.random() * FALLBACK_PHRASES.length)
-	] as string;
+	return (
+		FALLBACK_PHRASES[Math.floor(Math.random() * FALLBACK_PHRASES.length)] ??
+		"うーん"
+	);
 }
 
 /** reply/replyToMessage の分岐を共通化 */
@@ -213,7 +214,7 @@ export async function execute(
 						const result = await sendOrReply(
 							gen.text,
 							perception,
-							planResult,
+							adjustedPlan,
 							ctx,
 						);
 						log.actions.push({
