@@ -8,7 +8,7 @@
   - ~~goal_check cron の役割変更（直接行動 → thought buffer 蓄積）~~
   - ~~patrol の出力に thought fragment 追加~~
 - [ ] 未解決の検討事項への対応（詳細は [07-phased-architecture.md](./07-phased-architecture.md) セクション H 参照）
-  - 複雑な会話への対応（検索結果を見て計画変更するフォールバック）
+  - [x] 複雑な会話への対応（検索結果再評価: `src/pipeline/search-reeval.ts`）
   - マルチターン会話での Phase 2 計画キャッシュ
   - voice モードでの Phase 2 省略
   - react モードでのフェーズスキップ
