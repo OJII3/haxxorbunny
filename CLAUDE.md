@@ -297,7 +297,7 @@ VC参加リクエスト（メンション + キーワード）
   → エージェントループ起動 (triggeredBy: "reaction", reactionContext 付き, MAX_ITER=3)
 
 cron (13分) — 高頻度タスク（agentBusy のみチェック）
-  ├─ autonomous_post (60分, disabled): アクティブ時間内のみ → 自由行動プロンプト → エージェントループ（95%+ do_nothing）
+  ├─ autonomous_post (180分, enabled): アクティブ時間内のみ → 自由行動プロンプト → エージェントループ（95%+ do_nothing）
   ├─ channel_patrol (1440分=1日): 全チャンネルスキャン → bot不在24時間超 かつ 直近人間メッセージ7日以内のチャンネル → patrolReflect（観察モード: 上位3チャンネル、テキスト発言なし、リアクション+記憶+personality更新のみ）
   ├─ goal_check (720分=12時間): アクティブゴールあれば → 内部確認のみ（発言は基本しない）
   └─ custom tasks (各タスクの interval): type=custom のタスクを shouldRunTask → require_active_hours チェック → agentBusy チェック → 全ギルドで selectChannel → customTaskContext 付きエージェントループ実行
