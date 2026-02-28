@@ -530,7 +530,7 @@ patrol cron → チャンネルスキャン → patrolReflect()
 
 ## H. 未解決の検討事項
 
-- **複雑な会話への対応:** 計画段階で「search_then_reply」を選んだが、検索結果を見て計画を変えたい場合のフォールバック
+- ~~**複雑な会話への対応:** 計画段階で「search_then_reply」を選んだが、検索結果を見て計画を変えたい場合のフォールバック~~ ✅ 検索結果再評価（Search Re-Evaluation）として実装済み。Phase 4 内の `search_then_reply` ケースで検索実行後・生成前に軽量 LLM で再評価し、`proceed` / `adjust` / `drop_search` / `give_up` の4分岐で対応。検索失敗時は LLM を呼ばずに `give_up`（フォールバックフレーズ送信）。詳細は `src/pipeline/search-reeval.ts` を参照。
 - **マルチターン会話:** 相手が連続で返信してきた場合、Phase 2 の計画をキャッシュして再利用するか毎回やり直すか
 - **voice モード:** リアルタイム性が求められるため、Phase 2（計画）を省略して Phase 1 → Phase 3 の直結が適切かもしれない
 - **react モード:** Phase 3（生成）が不要で Phase 2（計画）で emoji を決めて Phase 4 で実行するだけ。フェーズをスキップする仕組み

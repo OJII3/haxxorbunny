@@ -88,6 +88,20 @@ export interface GenerationResult {
 	text: string;
 }
 
+// ── Search Re-Evaluation ──
+
+export type SearchReEvalAction =
+	| "proceed" // 検索結果を使って元の計画通りに返信
+	| "adjust" // reply_approach を変更して返信
+	| "drop_search" // 検索結果を捨てて、検索なしで返信
+	| "give_up"; // 雑に流す
+
+export interface SearchReEvalResult {
+	action: SearchReEvalAction;
+	adjusted_approach: string | null;
+	reasoning: string;
+}
+
 // ── Phase 4: Execution ──
 
 export interface ExecutionLog {

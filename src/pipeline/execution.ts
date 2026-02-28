@@ -9,6 +9,7 @@ import type { ToolResult } from "../agent/types.ts";
 import { saveBotAction } from "../db/queries.ts";
 import { loadCategories, saveCategories } from "../llm/channel-category.ts";
 import { generate } from "./generation.ts";
+import { reEvalSearch } from "./search-reeval.ts";
 import type {
 	ExecutionLog,
 	GenerationResult,
@@ -16,6 +17,46 @@ import type {
 	PipelineContext,
 	PlanResult,
 } from "./types.ts";
+
+const FALLBACK_PHRASES = [
+	"しらん",
+	"わからん",
+	"むずい",
+	"うーん",
+	"知らんけど",
+	"ふーん",
+	"まあいいか",
+	"なんだろね",
+];
+
+/** give_up 時のフォールバックフレーズをランダム選択 */
+function pickFallbackPhrase(): string {
+	return FALLBACK_PHRASES[
+		Math.floor(Math.random() * FALLBACK_PHRASES.length)
+	] as string;
+}
+
+/** reply/replyToMessage の分岐を共通化 */
+async function sendOrReply(
+	text: string,
+	perception: PerceptionResult,
+	planResult: PlanResult,
+	ctx: PipelineContext,
+): Promise<ToolResult> {
+	if (perception.triggerMessage && !planResult.reply_as_normal) {
+		return await replyToMessageCore({
+			content: text,
+			triggerMessage: perception.triggerMessage,
+			guild: ctx.guild,
+			channel: ctx.channel,
+		});
+	}
+	return await sendMessageCore({
+		content: text,
+		channel: ctx.channel,
+		guild: ctx.guild,
+	});
+}
 
 /**
  * Phase 4: 実行
@@ -44,21 +85,12 @@ export async function execute(
 					break;
 				}
 
-				let result: ToolResult;
-				if (perception.triggerMessage && !planResult.reply_as_normal) {
-					result = await replyToMessageCore({
-						content: generated.text,
-						triggerMessage: perception.triggerMessage,
-						guild: ctx.guild,
-						channel: ctx.channel,
-					});
-				} else {
-					result = await sendMessageCore({
-						content: generated.text,
-						channel: ctx.channel,
-						guild: ctx.guild,
-					});
-				}
+				const result = await sendOrReply(
+					generated.text,
+					perception,
+					planResult,
+					ctx,
+				);
 				log.actions.push({
 					type: "reply",
 					success: result.success,
@@ -120,6 +152,8 @@ export async function execute(
 					});
 					break;
 				}
+
+				// 検索実行
 				const searchResult = await webSearchCore({
 					query: planResult.search_query,
 				});
@@ -129,35 +163,98 @@ export async function execute(
 					detail: searchResult.result.slice(0, 200),
 				});
 
-				if (searchResult.success) {
-					// 検索結果をもとに生成
-					const searchGenerated = await generate(
-						planResult,
-						perception,
-						ctx,
-						searchResult.result,
-					);
-					// 送信
-					let sendResult: ToolResult;
-					if (perception.triggerMessage && !planResult.reply_as_normal) {
-						sendResult = await replyToMessageCore({
-							content: searchGenerated.text,
-							triggerMessage: perception.triggerMessage,
-							guild: ctx.guild,
-							channel: ctx.channel,
+				// 検索結果の再評価
+				const reeval = await reEvalSearch(
+					planResult.reply_approach,
+					planResult.search_query,
+					searchResult.success ? searchResult.result : null,
+					perception.content,
+				);
+				log.actions.push({
+					type: "search_reeval",
+					success: true,
+					detail: `action=${reeval.action}, reasoning=${reeval.reasoning}`,
+				});
+
+				switch (reeval.action) {
+					case "proceed": {
+						const gen = await generate(
+							planResult,
+							perception,
+							ctx,
+							searchResult.result,
+						);
+						const result = await sendOrReply(
+							gen.text,
+							perception,
+							planResult,
+							ctx,
+						);
+						log.actions.push({
+							type: "search_reply",
+							success: result.success,
+							detail: result.result,
 						});
-					} else {
-						sendResult = await sendMessageCore({
-							content: searchGenerated.text,
-							channel: ctx.channel,
-							guild: ctx.guild,
-						});
+						break;
 					}
-					log.actions.push({
-						type: "search_reply",
-						success: sendResult.success,
-						detail: sendResult.result,
-					});
+
+					case "adjust": {
+						const adjustedPlan: PlanResult = {
+							...planResult,
+							reply_approach:
+								reeval.adjusted_approach ?? planResult.reply_approach,
+						};
+						const gen = await generate(
+							adjustedPlan,
+							perception,
+							ctx,
+							searchResult.result,
+						);
+						const result = await sendOrReply(
+							gen.text,
+							perception,
+							planResult,
+							ctx,
+						);
+						log.actions.push({
+							type: "search_reply_adjusted",
+							success: result.success,
+							detail: result.result,
+						});
+						break;
+					}
+
+					case "drop_search": {
+						const gen = await generate(planResult, perception, ctx);
+						const result = await sendOrReply(
+							gen.text,
+							perception,
+							planResult,
+							ctx,
+						);
+						log.actions.push({
+							type: "search_reply_dropped",
+							success: result.success,
+							detail: result.result,
+						});
+						break;
+					}
+
+					case "give_up": {
+						const phrase = pickFallbackPhrase();
+						const result = await sendOrReply(
+							phrase,
+							perception,
+							planResult,
+							ctx,
+						);
+						log.actions.push({
+							type: "search_reply_giveup",
+							success: result.success,
+							detail: phrase,
+						});
+						break;
+					}
 				}
 				break;
 			}
