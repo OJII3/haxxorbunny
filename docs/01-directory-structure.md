@@ -69,6 +69,21 @@ src/
 │   └── prompts/
 │       ├── system.ts     # buildSystemPrompt(identity) 関数 (SOUL/TOOLS/IDENTITY_REMINDER 3層構造)
 │       └── personality.ts # 可変プロンプト (4次元気分ベクトル + personality.json)
+├── pipeline/
+│   ├── types.ts          # パイプライン共通型定義 (PlanAction, PlanResult, PipelineContext 等)
+│   ├── message-flow.ts   # メッセージ応答パイプラインオーケストレーター (Phase 0→5 シーケンシャル実行)
+│   ├── perception.ts     # Phase 0: 知覚 (メッセージから構造化データ生成)
+│   ├── triage.ts         # Phase 1: 判断 (軽量LLM, engage/react/ignore)
+│   ├── planning.ts       # Phase 2: 計画 (軽量LLM, 行動計画立案, categorize含む)
+│   ├── generation.ts     # Phase 3: 生成 (メインLLM, テキスト生成のみ)
+│   ├── execution.ts      # Phase 4: 実行 (コード層, reply/react/memorize/categorize等)
+│   ├── reflection.ts     # Phase 5: 振り返り (軽量LLM, fire-and-forget)
+│   ├── voice-flow.ts     # ボイスチャット用パイプラインフロー
+│   └── prompts/
+│       ├── planning.ts   # Planning フェーズ用プロンプト
+│       ├── generation.ts # Generation フェーズ用プロンプト
+│       ├── triage.ts     # Triage フェーズ用プロンプト
+│       └── reflection.ts # Reflection フェーズ用プロンプト
 ├── scheduler/
 │   ├── index.ts          # cron スケジューラー (13分 + 2時間 の2系統)
 │   ├── cron.ts           # 高頻度/低頻度タスク分離実行

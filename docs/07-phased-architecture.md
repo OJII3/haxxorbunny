@@ -97,7 +97,9 @@ PerceptionResult {
   "should_memorize": false,          // 記憶に残すか
   "memo": null,                      // 記憶する場合の内容（30字以内）
   "should_search": false,            // Web検索が必要か
-  "search_query": null               // 検索クエリ
+  "search_query": null,              // 検索クエリ
+  "categorize_channel_id": null,     // カテゴライズ対象チャンネルID（null=現在のチャンネル）
+  "categorize_category": null        // "my-space" | "observe-only" | "bot-chat"
 }
 ```
 
@@ -106,6 +108,7 @@ PerceptionResult {
 - `react` — リアクション追加
 - `memorize` — 記憶保存
 - `search_then_reply` — 検索してから返信
+- `categorize` — チャンネルのカテゴリを変更（ユーザーが参加許可・制限の意図を示した場合のみ）
 - `do_nothing` — やっぱり何もしない（Phase 1 で見落とした理由で離脱）
 
 **actions = ["do_nothing"] の場合:** Phase 5（振り返り）へ。
@@ -153,6 +156,10 @@ for (const action of plan.actions) {
       break;
     case "memorize":
       await saveMemory(plan.memo);
+      break;
+    case "categorize":
+      // 他カテゴリから削除 → ターゲットカテゴリに追加 → 保存
+      await assignChannelToCategory(plan.categorize_channel_id, plan.categorize_category);
       break;
   }
 }
