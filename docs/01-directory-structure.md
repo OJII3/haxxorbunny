@@ -100,4 +100,13 @@ scripts/
 ├── migrate-to-guild.ts       # 既存データ移行スクリプト
 ├── migrate-global-memory.ts  # ギルド記憶→グローバル記憶の分類移行スクリプト
 └── sanitize-memory.ts        # システムプロンプト漏洩記憶のサニタイズスクリプト (--dry-run 対応)
+docs/
+├── 01-directory-structure.md  # 本ファイル（ディレクトリ構成）
+├── 02-architecture.md         # Tool-Use Agent 方式 + ツール一覧
+├── 03-event-flow.md           # トリアージ + イベントフロー
+├── 04-humanlike-system.md     # 人間らしさシステム全般
+├── 05-data-model.md           # データモデル + 環境変数
+├── 06-deploy.md               # デプロイ手順
+├── 07-phased-architecture.md  # フェーズ分離型アーキテクチャ設計書
+└── TODO.md                    # 未実装・改善案
 ```
